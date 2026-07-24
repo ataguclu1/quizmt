@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.gitignore
+*.log
+*.zip
+*.tar.gz
+attached_assets/*.zip
+attached_assets/Pasted-*.txt
+.env
+.env.*
+!.env.example
+ANALIZ-RAPORU.md

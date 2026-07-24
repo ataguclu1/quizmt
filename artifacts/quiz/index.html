@@ -1,0 +1,3365 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssisTT Quiz Time</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
+
+:root {
+  --tt-blue:#002C5F;--tt-cyan:#00B5E2;--tt-cyan-dark:#0090B8;
+  --tt-bg:#001428;--panel:#ffffff0d;--border:rgba(255,255,255,.12);
+  --ok:#27ae60;--bad:#e74c3c;--warn:#f39c12;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Montserrat',sans-serif;background:var(--tt-bg);color:#fff;min-height:100vh;min-height:100dvh;overflow-x:hidden}
+.screen{display:none;min-height:100vh;min-height:100dvh}.screen.active{display:flex;flex-direction:column}
+.center-screen{align-items:center;justify-content:center;text-align:center;padding:2rem;
+  background:radial-gradient(ellipse at 50% 0%,rgba(0,181,226,.15) 0%,transparent 70%),
+             linear-gradient(170deg,var(--tt-bg) 0%,#001f45 100%)}
+
+/* ── BUTTONS ── */
+.btn{padding:.85rem 2.2rem;border-radius:12px;border:none;cursor:pointer;font-size:1rem;font-weight:700;font-family:inherit;transition:all .18s ease;letter-spacing:.3px}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.25)}.btn:active{transform:scale(.97)}
+.btn-primary{background:linear-gradient(135deg,var(--tt-cyan),var(--tt-cyan-dark));color:#fff}
+.btn-outline{background:rgba(255,255,255,.06);color:#fff;border:1.5px solid var(--border)}
+.btn-outline:hover{background:rgba(255,255,255,.12)}
+.btn-success{background:linear-gradient(135deg,#27ae60,#1e8449);color:#fff}
+.btn-danger{background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff}
+.btn-sm{padding:.55rem 1.3rem;font-size:.85rem}
+.btn-group{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center}
+
+/* ── CARDS & INPUTS ── */
+.card{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:20px;padding:2.2rem;width:100%;max-width:420px;display:flex;flex-direction:column;gap:1.1rem;backdrop-filter:blur(10px);box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.inp{width:100%;padding:.95rem 1.2rem;background:rgba(255,255,255,.07);border:1.5px solid var(--border);border-radius:12px;color:#fff;font-size:1rem;outline:none;font-family:inherit;transition:all .2s}
+/* Tarayıcı, <select> açıldığında listeyi kendi native popup'ıyla çiziyor ve
+   yarı saydam (rgba) arka planları yok sayıp genelde beyaza düşürüyor — üstteki
+   .inp/inline stiller kapalı kutuda iyi görünse de, açık listede beyaz metin
+   beyaz zemine düşüp fare üzerine gelmeden okunamaz hale geliyordu. Tüm
+   select/option'lara sabit, opak bir koyu zemin vererek bunu tek yerden çözüyoruz. */
+select, select option{background:#0a2540;color:#fff}
+select{color-scheme:dark}
+.inp:focus{border-color:var(--tt-cyan);background:rgba(0,181,226,.08)}
+.inp-pin{font-size:2.2rem;font-weight:900;letter-spacing:12px;text-align:center}
+.err-msg{color:var(--bad);font-weight:600;font-size:.9rem;display:none}
+
+/* ── ADMIN ── */
+#screen-admin{flex-direction:column;background:var(--tt-bg)}
+.ahdr{background:#001e3d;padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem;border-bottom:1px solid var(--border);flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.3);z-index:10}
+.abody{display:flex;flex:1;overflow:hidden}
+.sidebar{width:270px;background:#001e3d;border-right:1px solid var(--border);padding:1.2rem;display:flex;flex-direction:column;gap:.8rem;overflow-y:auto}
+.sidebar h3{font-size:.72rem;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.4);font-weight:700}
+.qlist{list-style:none;display:flex;flex-direction:column;gap:.4rem}
+.qi{padding:.7rem .9rem;background:rgba(255,255,255,.04);border-radius:10px;cursor:pointer;font-size:.85rem;border:1.5px solid transparent;display:flex;align-items:center;gap:.6rem;transition:all .15s}
+.qi:hover{background:rgba(255,255,255,.08)}.qi.active{border-color:var(--tt-cyan);background:rgba(0,181,226,.1)}
+.qnum{width:22px;height:22px;background:var(--tt-cyan);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;flex-shrink:0}
+.qtx{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.editor{flex:1;padding:2rem;overflow-y:auto}
+.fg{margin-bottom:1rem}.fg label{display:block;font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:.45rem;text-transform:uppercase;letter-spacing:1px;font-weight:700}
+.fg input,.fg select,.fg textarea{width:100%;padding:.85rem 1rem;background:rgba(255,255,255,.05);border:1.5px solid var(--border);border-radius:10px;color:#fff;font-size:.9rem;outline:none;font-family:inherit;transition:border .2s;resize:vertical}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--tt-cyan)}.fg select option{background:#001e3d}
+.egrid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+.abox{display:flex;align-items:center;gap:.7rem;padding:.7rem .9rem;border-radius:10px;border:2px solid var(--border);transition:all .15s}
+.abox.correct{border-color:var(--ok);background:rgba(39,174,96,.1)}
+.abox input[type=text]{background:transparent;border:none;flex:1;color:#fff;font-size:.9rem;padding:0;outline:none}
+.adot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.da{background:#e74c3c}.db{background:#3498db}.dc{background:#f39c12}.dd{background:#27ae60}
+.ct{width:22px;height:22px;border:2px solid rgba(255,255,255,.3);border-radius:50%;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.75rem;transition:all .15s}
+.abox.correct .ct{background:var(--ok);border-color:var(--ok)}
+
+/* ── LIBRARY ── */
+.lib-list{display:flex;flex-direction:column;gap:.4rem;max-height:420px;overflow-y:auto}
+.lib-item{display:flex;align-items:center;gap:.5rem;padding:.6rem .8rem;background:rgba(255,255,255,.05);border-radius:8px;border:1px solid var(--border);font-size:.82rem}
+.lib-item .lib-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── HOST LOBBY ── */
+#screen-host{background:radial-gradient(ellipse at 50% -20%,rgba(0,181,226,.2) 0%,transparent 60%),linear-gradient(170deg,var(--tt-bg),#001f45);align-items:center;justify-content:center;padding:2rem;text-align:center;gap:1.5rem}
+.pin-label{font-size:.75rem;text-transform:uppercase;letter-spacing:4px;color:rgba(255,255,255,.5);font-weight:700}
+.pin-display{font-size:5rem;font-weight:900;letter-spacing:10px;color:#fff;line-height:1;text-shadow:0 0 40px rgba(0,181,226,.4)}
+.qrwrap{background:#fff;padding:12px;border-radius:14px;display:inline-block;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.pbox{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;padding:1.5rem 2rem;min-width:340px;max-width:600px;width:100%}
+.pchips{display:flex;flex-wrap:wrap;gap:.7rem;justify-content:center;min-height:60px}
+.pchip{display:flex;align-items:center;gap:.6rem;padding:.45rem 1rem .45rem .45rem;border-radius:50px;font-size:.9rem;font-weight:600;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.15);animation:chipIn .4s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes chipIn{from{opacity:0;transform:scale(.5) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.chip-av{width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,.1)}
+.chip-av img{width:36px;height:36px;border-radius:50%;display:block}
+
+/* ── JOIN ── */
+#screen-join{background:radial-gradient(ellipse at 50% 0%,rgba(0,181,226,.15) 0%,transparent 70%),linear-gradient(170deg,var(--tt-bg),#001f45);align-items:center;justify-content:center;padding:2rem;gap:1rem}
+
+/* ── AVATAR ── */
+#screen-avatar{background:linear-gradient(170deg,var(--tt-bg),#001f45);flex-direction:column;align-items:center;padding:1.5rem;gap:1rem;overflow-y:auto}
+.av-circle{width:150px;height:150px;border-radius:50%;overflow:hidden;border:4px solid var(--tt-cyan);box-shadow:0 0 40px rgba(0,181,226,.3);flex-shrink:0}
+.av-tabs{display:flex;gap:.4rem;background:rgba(255,255,255,.07);border-radius:10px;padding:5px;flex-wrap:wrap;justify-content:center}
+.av-tab{padding:.5rem 1rem;border-radius:7px;font-size:.85rem;font-weight:700;cursor:pointer;border:none;background:transparent;color:rgba(255,255,255,.5);font-family:inherit;transition:all .2s}
+.av-tab.active{background:var(--tt-cyan);color:#fff}
+.av-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;width:100%;max-width:480px}
+.av-itm{aspect-ratio:1;border-radius:14px;background:rgba(255,255,255,.04);border:2.5px solid transparent;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px}
+.av-itm:hover{background:rgba(255,255,255,.08);transform:translateY(-2px)}.av-itm.sel{border-color:var(--tt-cyan);background:rgba(0,181,226,.12)}
+
+/* ── WAITING ── */
+#screen-waiting{background:radial-gradient(ellipse at 50% -10%,rgba(0,181,226,.2) 0%,transparent 60%),linear-gradient(170deg,var(--tt-bg),#001f45);align-items:center;justify-content:center;text-align:center;padding:2rem;gap:1.5rem}
+.wav{width:130px;height:130px;border-radius:50%;overflow:hidden;border:4px solid var(--tt-cyan);box-shadow:0 0 0 0 rgba(0,181,226,.4);animation:wavePulse 2.5s ease-in-out infinite}
+@keyframes wavePulse{0%,100%{box-shadow:0 0 0 0 rgba(0,181,226,.4)}50%{box-shadow:0 0 0 20px rgba(0,181,226,0)}}
+
+/* ── HOST QUESTION ── */
+#screen-qhost{flex-direction:column;background:var(--tt-bg);position:relative}
+.qhdr{background:#001e3d;padding:1.2rem 1.5rem;display:flex;align-items:center;gap:1.2rem;border-bottom:1px solid var(--border);box-shadow:0 4px 15px rgba(0,0,0,.2)}
+.qprog{flex:1;height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden}
+.qbar{height:100%;background:linear-gradient(90deg,var(--tt-cyan),#00e5ff);border-radius:4px;transition:width .1s linear;box-shadow:0 0 8px rgba(0,181,226,.5)}
+.tcircle{width:60px;height:60px;border-radius:50%;background:var(--tt-cyan);color:#fff;font-size:1.6rem;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .3s}
+.tcircle.urgent{background:var(--bad);animation:tPulse .5s ease-in-out infinite}
+@keyframes tPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.qtxtbox{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:18px;padding:2.5rem 2rem;font-size:1.7rem;font-weight:800;text-align:center;flex:1;display:flex;align-items:center;justify-content:center;margin:1rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.ag4{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;padding:0 1rem 1rem}
+.abtn{padding:1.3rem 1rem;border-radius:14px;border:none;cursor:default;font-size:1rem;font-weight:700;color:#fff;display:flex;align-items:center;gap:.8rem;position:relative;overflow:hidden;transition:all .25s}
+.ashape{width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem;background:rgba(0,0,0,.2);border-radius:8px}
+.aa{background:linear-gradient(135deg,#c0392b,#e74c3c)}.ab{background:linear-gradient(135deg,#1a5276,#2980b9)}.ac{background:linear-gradient(135deg,#9a7d0a,#d4ac0d);color:#fff}.ad{background:linear-gradient(135deg,#1e8449,#27ae60)}
+.hbar{position:absolute;bottom:0;left:0;height:6px;background:rgba(255,255,255,.4);border-radius:0 3px 3px 0;transition:width .7s cubic-bezier(.4,0,.2,1)}
+.abtn.revealed.correct{box-shadow:0 0 0 3px #fff,0 0 30px rgba(39,174,96,.6);animation:revealPop .4s ease}
+.abtn.revealed.wrong{opacity:.3;filter:grayscale(80%)}
+@keyframes revealPop{0%{transform:scale(1)}50%{transform:scale(1.04)}100%{transform:scale(1)}}
+.qftr{background:#001e3d;padding:1.2rem 1.5rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.8rem;border-top:1px solid var(--border)}
+.stat-pill{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:50px;padding:.45rem 1.2rem;font-size:.9rem;font-weight:600}
+.all-banner{background:rgba(39,174,96,.15);border:1.5px solid rgba(39,174,96,.4);border-radius:12px;padding:.8rem 1.2rem;font-weight:700;font-size:.95rem;color:#2ecc71;text-align:center;margin:0 1rem}
+
+/* ── PLAYER QUESTION ── */
+#screen-qplayer{flex-direction:column;background:var(--tt-bg);position:relative}
+.pqhdr{background:#001e3d;padding:1rem 1.2rem;display:flex;align-items:center;gap:1rem;border-bottom:1px solid var(--border)}
+.pqtxt{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:16px;padding:2rem;font-size:1.3rem;font-weight:800;text-align:center;flex:1;display:flex;align-items:center;justify-content:center;margin:.8rem}
+.paans{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;padding:0 .8rem .8rem}
+.pabtn{padding:1.2rem .8rem;border-radius:14px;border:none;cursor:pointer;font-size:1rem;font-weight:700;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;transition:all .18s;font-family:inherit}
+.pabtn:hover:not(:disabled){filter:brightness(1.1);transform:scale(1.02)}
+.pabtn:disabled{cursor:not-allowed}
+.pabtn .sym{font-size:1.8rem}
+.pabtn.selected{box-shadow:0 0 0 3px #fff inset}
+.pfeedback{text-align:center;padding:.5rem;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem}
+
+/* ── LEADERBOARD ── */
+#screen-lb{background:radial-gradient(ellipse at 50% -10%,rgba(0,181,226,.15) 0%,transparent 60%),linear-gradient(170deg,var(--tt-bg),#001f45);align-items:center;justify-content:center;padding:2rem;gap:1.2rem;text-align:center}
+.lbtitle{font-size:2.2rem;font-weight:900;color:var(--tt-cyan)}
+.lbwrap{width:100%;max-width:560px}
+.lbrow{display:flex;align-items:center;gap:1.2rem;border-radius:14px;padding:.9rem 1.2rem;margin-bottom:.6rem;animation:lbSlide .5s ease both}
+@keyframes lbSlide{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
+.lb1{background:linear-gradient(90deg,rgba(241,196,15,.25),rgba(241,196,15,.06));border:1px solid rgba(241,196,15,.4)}
+.lb2{background:linear-gradient(90deg,rgba(189,195,199,.2),rgba(189,195,199,.05));border:1px solid rgba(189,195,199,.3)}
+.lb3{background:linear-gradient(90deg,rgba(211,84,0,.2),rgba(211,84,0,.05));border:1px solid rgba(211,84,0,.3)}
+.lbx{background:rgba(255,255,255,.05);border:1px solid var(--border)}
+.lbrank{width:44px;font-weight:900;text-align:center;font-size:1.5rem}
+.lbname{flex:1;font-weight:700;text-align:left;font-size:1.1rem}
+.lbscore{font-weight:900;font-size:1.3rem;color:var(--tt-cyan)}
+
+/* ── END ── */
+#screen-end{background:radial-gradient(ellipse at 50% -10%,rgba(0,181,226,.18) 0%,transparent 60%),linear-gradient(170deg,var(--tt-bg),#001f45);align-items:center;justify-content:center;padding:2rem;gap:1.2rem;text-align:center}
+
+/* ── MISC ── */
+#confetti-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:800;display:none}
+.music-btn{position:fixed;bottom:1.2rem;right:1.2rem;width:48px;height:48px;border-radius:50%;background:rgba(0,181,226,.8);border:none;color:#fff;font-size:1.3rem;cursor:pointer;z-index:9000;transition:all .2s;backdrop-filter:blur(6px);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.music-btn:hover{background:var(--tt-cyan);transform:scale(1.08)}
+.toast-c{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--tt-cyan);color:#fff;padding:.8rem 1.8rem;border-radius:50px;font-weight:700;font-size:.9rem;z-index:9999;box-shadow:0 8px 20px rgba(0,0,0,.3);animation:toastIn .3s ease;pointer-events:none}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
+/* pfeedback içindeki DOĞRU!/YANLIŞ metni için — toastIn'i kullanmıyoruz çünkü
+   o, toast balonunun kendi left:50%+translateX(-50%) konumlandırmasına göre
+   tasarlanmış; normal, ortalanmış bir blok elemente uygulanınca elemanı
+   kendi genişliğinin %50'si kadar sola kaydırıp animasyon bitince (fill-mode
+   olmadığı için) gerçek konumuna "zıplatıyordu" — bildirilen hatanın sebebi
+   tam olarak buydu. Bu, sadece scale+fade yapan, konum kaydırmayan ayrı bir
+   animasyon. */
+@keyframes revealPop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+
+/* ── RESPONSIVE ── */
+@media(max-width:700px){
+  .egrid{grid-template-columns:1fr}
+  .ag4,.paans{grid-template-columns:1fr}
+  .pin-display{font-size:3rem;letter-spacing:6px}
+  .qtxtbox{font-size:1.2rem;padding:1.5rem 1rem;margin:.5rem}
+  .pqtxt{font-size:1.1rem;padding:1.2rem .8rem;margin:.5rem}
+  .abtn{font-size:.9rem;padding:1rem .8rem}
+  .pabtn{font-size:.9rem;padding:1rem .5rem}
+  .pabtn .sym{font-size:1.4rem}
+  .sidebar{width:100%;border-right:none;border-bottom:1px solid var(--border);max-height:200px}
+  .abody{flex-direction:column}
+  .editor{padding:1rem}
+  .av-grid{grid-template-columns:repeat(3,1fr)}
+  .lbtitle{font-size:1.6rem}
+  .lbname{font-size:.95rem}
+}
+@media(max-width:420px){
+  .center-screen{padding:1rem}
+  .pin-display{font-size:2.2rem;letter-spacing:4px}
+  .av-grid{grid-template-columns:repeat(2,1fr);gap:.5rem}
+  .qtxtbox,.pqtxt{padding:1rem .6rem;margin:.3rem}
+  .abtn,.pabtn{padding:.8rem .5rem;font-size:.85rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ LANDING ═══ -->
+<div id="screen-landing" class="screen active center-screen" style="gap:1.2rem">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:56px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.4))">
+  <div style="font-size:2.8rem;font-weight:900;letter-spacing:-1px">Quiz <span style="color:var(--tt-cyan)">Time</span></div>
+  <div style="color:rgba(255,255,255,.5);font-size:.95rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:.2rem">Kurumsal Etkileşim Platformu</div>
+  <div class="btn-group" style="margin-top:1rem">
+    <button class="btn btn-primary" onclick="showAdminLogin()">⚙️ Yönetici Paneli</button>
+    <button class="btn btn-outline" onclick="show('join')">🎮 Oyuna Katıl</button>
+  </div>
+</div>
+
+<!-- ═══ ADMIN LOGIN ═══ -->
+<div id="screen-admin-login" class="screen center-screen" style="gap:0">
+  <div class="card">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:36px;margin:0 auto">
+    <div style="font-size:1.4rem;font-weight:800;color:var(--tt-cyan)">Sistem Girişi</div>
+    <div>
+      <label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.4rem;text-transform:uppercase;letter-spacing:1.5px;font-weight:700">SİCİL NUMARASI</label>
+      <input class="inp" type="text" id="login-sicil" placeholder="Örn: A053252" maxlength="20" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')siciLogin()">
+    </div>
+    <div id="login-pw-wrap">
+      <label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.4rem;text-transform:uppercase;letter-spacing:1.5px;font-weight:700">ŞİFRE</label>
+      <input class="inp" type="password" id="login-pw" placeholder="Şifrenizi girin..." onkeydown="if(event.key==='Enter')siciLogin()">
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="siciLogin()">Giriş Yap →</button>
+    <div class="err-msg" id="login-err" style="display:none">Giriş başarısız!</div>
+    <button class="btn btn-outline btn-sm" onclick="show('landing')">← Ana Ekran</button>
+  </div>
+</div>
+
+<!-- ═══ LIMITED USER PANEL ═══ -->
+<div id="screen-limited" class="screen center-screen" style="flex-direction:column;gap:1.2rem">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:48px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.4))">
+  <div style="font-size:2rem;font-weight:900">Quiz <span style="color:var(--tt-cyan)">Time</span></div>
+  <div style="color:rgba(255,255,255,.5);font-size:.95rem" id="limited-adsoyad"></div>
+  <div class="card" style="max-width:480px;gap:1.2rem">
+    <div>
+      <label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.5rem;text-transform:uppercase;letter-spacing:1.5px;font-weight:700">SORU SETİ SEÇ</label>
+      <select class="inp" id="limited-sets" style="background:rgba(255,255,255,.07);color:#fff;cursor:pointer"></select>
+    </div>
+    <button class="btn btn-success" onclick="startLimitedLobby()" style="width:100%;font-size:1.05rem;padding:1rem">▶ Lobiyi Başlat</button>
+    <button class="btn btn-outline btn-sm" onclick="showChangePw()" style="width:100%">🔑 Şifremi Değiştir</button>
+    <button class="btn btn-outline btn-sm" onclick="logout()" style="width:100%">🚪 Çıkış Yap</button>
+  </div>
+</div>
+
+<!-- ═══ CHANGE PASSWORD MODAL ═══ -->
+<div id="modal-changepw" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
+  <div class="card" style="max-width:380px;gap:1rem">
+    <div style="font-size:1.1rem;font-weight:800;color:var(--tt-cyan)">🔑 Şifre Değiştir</div>
+    <div class="fg" style="margin:0"><label>Mevcut Şifre</label><input class="inp" type="password" id="cpw-old" placeholder="Mevcut şifreniz" onkeydown="if(event.key==='Enter')doChangePw()"></div>
+    <div class="fg" style="margin:0"><label>Yeni Şifre</label><input class="inp" type="password" id="cpw-new" placeholder="Yeni şifre (en az 4 karakter)" onkeydown="if(event.key==='Enter')doChangePw()"></div>
+    <div class="fg" style="margin:0"><label>Yeni Şifre (Tekrar)</label><input class="inp" type="password" id="cpw-new2" placeholder="Yeni şifreyi tekrar girin" onkeydown="if(event.key==='Enter')doChangePw()"></div>
+    <div id="cpw-err" style="color:var(--bad);font-size:.85rem;display:none"></div>
+    <div style="display:flex;gap:.8rem">
+      <button class="btn btn-primary" style="flex:1" onclick="doChangePw()">Kaydet</button>
+      <button class="btn btn-outline" onclick="closeChangePw()">İptal</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ AI ASISTAN MODAL ═══ -->
+<div id="modal-ai" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.75);align-items:flex-end;justify-content:flex-end;padding:1rem">
+  <div class="card" style="width:420px;max-width:100%;max-height:80vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
+      <span style="font-size:1.1rem">🤖</span>
+      <span style="font-weight:800;color:var(--tt-cyan);flex:1">AI Asistan</span>
+      <div style="display:flex;gap:.4rem">
+        <button class="btn btn-sm" id="ai-tab-quiz" onclick="switchAiTab('quiz')" style="background:var(--tt-cyan);color:#fff;font-size:.75rem">Soru Üret</button>
+        <button class="btn btn-sm" id="ai-tab-chat" onclick="switchAiTab('chat')" style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-size:.75rem">Analitik</button>
+      </div>
+      <button onclick="closeAiModal()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
+    </div>
+    <!-- Quiz Generate Tab -->
+    <div id="ai-panel-quiz" style="flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.8rem">
+      <div style="display:flex;gap:.4rem;background:rgba(255,255,255,.05);border-radius:9px;padding:.25rem">
+        <button id="ai-mode-topic" onclick="switchAiGenMode('topic')" style="flex:1;padding:.5rem;border:none;border-radius:7px;cursor:pointer;font-size:.8rem;font-weight:700;background:var(--tt-cyan);color:#fff">💬 Konudan Üret</button>
+        <button id="ai-mode-file" onclick="switchAiGenMode('file')" style="flex:1;padding:.5rem;border:none;border-radius:7px;cursor:pointer;font-size:.8rem;font-weight:700;background:transparent;color:rgba(255,255,255,.6)">📄 Dosyadan Üret</button>
+      </div>
+
+      <div id="ai-gen-topic-fields">
+        <div class="fg" style="margin:0"><label>Konu</label><input type="text" id="ai-topic" placeholder="Örn: Türk tarihi, matematik, coğrafya..." onkeydown="if(event.key==='Enter')aiGenerateQuiz()"></div>
+      </div>
+      <div id="ai-gen-file-fields" style="display:none">
+        <div class="fg" style="margin:0"><label>Eğitim Dokümanı <span style="font-weight:400;color:rgba(255,255,255,.4)">(PDF, Word, Excel ya da PowerPoint)</span></label>
+          <input type="file" id="ai-file-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" style="width:100%;padding:.6rem;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:10px;font-size:.85rem;box-sizing:border-box">
+        </div>
+        <div id="ai-file-name" style="font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.3rem"></div>
+        <div style="font-size:.75rem;color:rgba(255,255,255,.4);margin-top:.4rem">Sorular, AI tarafından SADECE bu dokümanın içeriğinden üretilir — genel bilgi kullanılmaz.</div>
+      </div>
+
+      <div class="fg" style="margin:0"><label>Soru Sayısı</label><input type="number" id="ai-count" value="10" min="3" max="20"></div>
+      <button class="btn btn-primary" onclick="aiGenerateQuiz()" id="ai-gen-btn">✨ Oluştur</button>
+      <div id="ai-quiz-result" style="display:none;flex-direction:column;gap:.6rem"></div>
+    </div>
+    <!-- Analytics Chat Tab -->
+    <div id="ai-panel-chat" style="flex:1;overflow-y:auto;display:none;flex-direction:column">
+      <div id="ai-chat-msgs" style="flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.7rem;min-height:200px"></div>
+      <div style="padding:.8rem;border-top:1px solid var(--border);display:flex;gap:.6rem">
+        <input type="text" id="ai-chat-input" placeholder="Örn: En çok hata yapılan soru nedir?" style="flex:1;background:rgba(255,255,255,.08);border:1px solid var(--border);color:#fff;border-radius:8px;padding:.5rem .8rem;font-size:.85rem" onkeydown="if(event.key==='Enter')aiSendChat()">
+        <button class="btn btn-sm btn-primary" onclick="aiSendChat()">Gönder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ KULLANICI YÖNETİMİ MODAL (sadece admin) ═══ -->
+<div id="modal-users" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:560px;max-width:100%;max-height:85vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
+      <span style="font-size:1.1rem">👥</span>
+      <span style="font-weight:800;color:var(--tt-cyan);flex:1">Kullanıcı Yönetimi</span>
+      <button onclick="closeUsersModal()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:1.1rem">
+      <div id="locked-accounts-section" style="display:none;margin-bottom:1rem">
+        <div style="font-weight:700;font-size:.85rem;margin-bottom:.5rem;color:var(--bad)">🔒 Kilitli Hesaplar</div>
+        <div class="lib-list" id="locked-list" style="max-height:none"></div>
+      </div>
+
+      <div style="display:flex;gap:.5rem;margin-bottom:.7rem">
+        <button class="btn btn-sm btn-primary" style="flex:1" onclick="toggleAddUserForm()">+ Yeni Kullanıcı Ekle</button>
+        <button class="btn btn-sm btn-outline" style="flex:1" onclick="toggleBulkImport()">📊 Excel ile Toplu Ekle</button>
+      </div>
+
+      <div id="add-user-form" style="display:none;background:rgba(255,255,255,.04);border-radius:10px;padding:.9rem;margin-bottom:1rem">
+        <div class="fg" style="margin:0"><label>Sicil No</label><input type="text" id="new-sicil" placeholder="Örn: B012345" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
+        <div class="fg" style="margin:.6rem 0 0"><label>Ad Soyad</label><input type="text" id="new-adsoyad" placeholder="Ad Soyad"></div>
+        <div class="fg" style="margin:.6rem 0 0"><label>Şifre</label><input type="password" id="new-pw" placeholder="Giriş şifresi (en az 4 karakter)"></div>
+        <div class="fg" style="margin:.6rem 0 0"><label>Yetki</label>
+          <select id="new-yetki">
+            <option value="manager">Tam Yetki (Ekle + Sil + Yayınla)</option>
+            <option value="full">Editör (Ekle + Yayınla)</option>
+            <option value="limited">Oyuncu (Sadece Yayınla)</option>
+          </select>
+        </div>
+        <button class="btn btn-sm btn-primary" style="width:100%;margin-top:.8rem" onclick="addUser(this)">+ Kullanıcı Ekle</button>
+      </div>
+
+      <div id="bulk-import-form" style="display:none;background:rgba(255,255,255,.04);border-radius:10px;padding:.9rem;margin-bottom:1rem">
+        <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:.6rem">
+          Excel sütun düzeni: <b>A</b>=Sicil, <b>B</b>=Ad Soyad, <b>C</b>=Şifre, <b>D</b>=Yetki kodu
+          (<b>1</b>=Tam Yetki, <b>2</b>=Editör, <b>3</b>=Oyuncu). İlk satır başlık olabilir, otomatik atlanır.
+        </div>
+        <input type="file" id="bulk-user-file" accept=".xlsx,.xls" style="width:100%;padding:.5rem;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;font-size:.82rem;box-sizing:border-box">
+        <button class="btn btn-sm btn-primary" style="width:100%;margin-top:.7rem" onclick="handleBulkUserImport(this)">📤 İçe Aktar</button>
+        <div id="bulk-import-result" style="font-size:.78rem;margin-top:.6rem"></div>
+      </div>
+
+      <input type="text" id="user-search" placeholder="🔍 Sicil ya da isimle ara..." style="width:100%;padding:.55rem .8rem;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;font-size:.82rem;margin-bottom:.7rem;box-sizing:border-box" oninput="renderUserList()">
+
+      <div class="lib-list" id="user-list" style="max-height:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ KULLANICI DETAY MODAL ═══ -->
+<div id="modal-user-detail" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.8);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:600px;max-width:100%;max-height:85vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
+      <span style="font-weight:800;color:var(--tt-cyan);flex:1" id="ud-title">Kullanıcı</span>
+      <button onclick="document.getElementById('modal-user-detail').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
+    </div>
+    <div style="display:flex;gap:.4rem;padding:.8rem 1.2rem 0">
+      <button class="ud-tab active" data-tab="login" onclick="switchUserDetailTab('login')" style="flex:1;padding:.5rem;border:none;border-radius:7px 7px 0 0;cursor:pointer;font-size:.8rem;font-weight:700;background:rgba(255,255,255,.08);color:#fff">🔑 Giriş Bilgileri</button>
+      <button class="ud-tab" data-tab="sessions" onclick="switchUserDetailTab('sessions')" style="flex:1;padding:.5rem;border:none;border-radius:7px 7px 0 0;cursor:pointer;font-size:.8rem;font-weight:700;background:transparent;color:rgba(255,255,255,.5)">📋 Oturum Bilgileri</button>
+      <button class="ud-tab" data-tab="ai" onclick="switchUserDetailTab('ai')" style="flex:1;padding:.5rem;border:none;border-radius:7px 7px 0 0;cursor:pointer;font-size:.8rem;font-weight:700;background:transparent;color:rgba(255,255,255,.5)">🤖 AI Kullanımı</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:1.1rem;background:rgba(255,255,255,.03)">
+      <div id="ud-panel-login"></div>
+      <div id="ud-panel-sessions" style="display:none"></div>
+      <div id="ud-panel-ai" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ İLK GİRİŞ BİLGİLENDİRME (ONBOARDING) ═══ -->
+<div id="modal-onboarding" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:640px;max-width:100%;max-height:88vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+    <div style="padding:1.3rem 1.3rem .8rem;text-align:center;border-bottom:1px solid var(--border)">
+      <div style="font-size:1.4rem;font-weight:900;color:var(--tt-cyan)">👋 Hoş geldin!</div>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.5);margin-top:.3rem">Panelde neler yapabileceğine hızlıca göz atalım.</div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:1.2rem">
+      <div style="display:flex;flex-direction:column;gap:.9rem">
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">📊</span><div><b>Raporlar</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Geçmiş sınavların Excel raporunu (katılımcı + soru bazlı) indir.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">🤖</span><div><b>AI Asistan</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Bir konudan ya da yüklediğin bir dokümandan (PDF/Word/Excel/PPT) otomatik soru üret; geçmiş sınav performansı hakkında soru sor.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">📥</span><div><b>Excel Yükle</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Kendi Excel formatınla toplu soru yükle (Soru, Tip, A-D şıkları, Cevap sütunları).</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">➕🗑️</span><div><b>Soru Ekle / Tümünü Sil</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Soruları tek tek elle ekleyebilir ya da hepsini birden temizleyebilirsin.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">✏️</span><div><b>Şık Düzenleme</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Her sorunun şıklarını (2-4 arası) ekleyip çıkarabilir, metnini değiştirebilir, doğru şıkkı işaretleyebilirsin.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">✖️</span><div><b>Puan Çarpanı</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Her soru için puan ağırlığını (standart/çift/yarım gibi) ayrı ayrı ayarlayabilirsin.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">💾</span><div><b>Kütüphaneye Kaydet</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Hazırladığın soru setini bir proje/kategori seçerek kaydet, sonra tekrar tekrar kullan.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">🔍</span><div><b>Kütüphane Filtreleme</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Kayıtlı sınavları isimle ara, projeye ya da oluşturan kişiye göre filtrele.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">🔑</span><div><b>Şifre Değiştir</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Kendi giriş şifreni istediğin zaman değiştirebilirsin.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">🎯</span><div><b>Geribildirim Oluştur</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Sınavı başlatmadan önce, belirli sorulara yanlış cevap verenlere özel bir mesaj/görsel gösterebilirsin.</div></div></div>
+
+        <div style="height:1px;background:var(--border);margin:.4rem 0"></div>
+        <div style="font-weight:800;color:var(--tt-cyan);font-size:.9rem">🆕 Yenilikler</div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">🔊</span><div><b>Sesli Soru</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">"+ Yeni Soru"nun yanındaki ▾ ok ile, gerçek bir müşteri/senaryo sesiyle soru oluşturabilirsin — duygu ve ses seçimi dahil.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">🏆</span><div><b>Başarı Sertifikası</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">Sınav bitince ilk 3'e giren katılımcılar kendi ekranlarından bir başarı sertifikası indirebiliyor.</div></div></div>
+        <div style="display:flex;gap:.8rem"><span style="font-size:1.3rem">📄</span><div><b>Dokümandan Soru Üretimi</b><div style="color:rgba(255,255,255,.55);font-size:.85rem">AI panelinde artık bir konu yazmak yerine PDF/Word/Excel/PPT yükleyip o dokümanın içeriğinden soru ürettirebilirsin.</div></div></div>
+      </div>
+    </div>
+    <div style="padding:1rem 1.3rem;border-top:1px solid var(--border);display:flex;gap:.8rem">
+      <button class="btn btn-primary" style="flex:1" onclick="dismissOnboarding()">🚀 Sınav Oluşturmaya Başla</button>
+    </div>
+  </div>
+</div>
+<div id="modal-launch" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:460px;max-width:100%;padding:1.3rem">
+    <div style="font-weight:800;color:var(--tt-cyan);font-size:1.1rem;margin-bottom:.3rem">🚀 Sınavı Başlat</div>
+    <div style="font-size:.82rem;color:rgba(255,255,255,.45);margin-bottom:1.1rem" id="launch-qcount"></div>
+    <div class="fg"><label>Oturum Adı <span style="font-weight:400;color:rgba(255,255,255,.4)">(katılımcı ekranında görünür)</span></label>
+      <input type="text" id="quiz-title" value="AssisTT Eğitim Quiz" style="font-size:1.05rem;padding:1rem 1.2rem">
+    </div>
+    <div class="fg" style="margin-top:.7rem"><label>Proje / Kategori <span style="font-weight:400;color:rgba(255,255,255,.4)">(raporlarda ve AI analizinde kullanılır)</span></label>
+      <select id="launch-category"></select>
+    </div>
+    <button id="btn-feedback" class="btn btn-outline btn-sm" style="width:100%;margin-top:.9rem" onclick="openFeedbackModal()">🎯 Geribildirim Oluştur <span id="fb-badge" style="display:none;background:var(--tt-cyan);color:#fff;border-radius:10px;padding:0 .45rem;font-size:.7rem;margin-left:.3rem">Aktif</span></button>
+    <div style="display:flex;gap:.7rem;margin-top:1.2rem">
+      <button class="btn btn-success" style="flex:1;font-size:1rem" onclick="confirmStartLobby()">🚀 Lobiyi Başlat</button>
+      <button class="btn btn-outline" onclick="closeLaunchModal()">Vazgeç</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SESLİ SORU OLUŞTUR MODAL ═══ -->
+<div id="modal-voice-q" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.8);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:640px;max-width:100%;max-height:90vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
+      <span style="font-size:1.1rem">🔊</span>
+      <span style="font-weight:800;color:var(--tt-cyan);flex:1" id="voiceq-modal-title">Sesli Soru Oluştur</span>
+      <button onclick="closeVoiceQuestionModal()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:1.1rem">
+
+      <div class="fg" style="margin:0"><label>Müşteri / Senaryo Metni <span style="font-weight:400;color:rgba(255,255,255,.4)">(seslendirilecek olan, tırnak içindeki cümle)</span></label>
+        <textarea id="voiceq-script" rows="3" placeholder='Örn: "Kartımı kaybettim, ne yapmam lazım?"' style="width:100%;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;padding:.6rem;font-family:inherit;font-size:.9rem;box-sizing:border-box"></textarea>
+        <div style="font-size:.72rem;color:rgba(255,255,255,.35);margin-top:.2rem;text-align:right"><span id="voiceq-charcount">0</span>/600 karakter</div>
+      </div>
+
+      <div style="display:flex;gap:.6rem;margin-top:.7rem">
+        <div class="fg" style="margin:0;flex:1"><label>Duygu</label>
+          <select id="voiceq-emotion">
+            <option value="notr">Nötr</option>
+            <option value="korkmus">😨 Korkmuş</option>
+            <option value="sinirli">😠 Sinirli</option>
+            <option value="endiseli">😟 Endişeli</option>
+            <option value="mutlu">😊 Mutlu</option>
+            <option value="uzgun">😢 Üzgün</option>
+            <option value="sakin">😌 Sakin</option>
+            <option value="saskin">😲 Şaşkın</option>
+            <option value="aceleci">⏱️ Aceleci</option>
+          </select>
+        </div>
+        <div class="fg" style="margin:0;flex:1"><label>Ses</label>
+          <select id="voiceq-voice"><option value="">Yükleniyor...</option></select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:.6rem;align-items:center;margin-top:.8rem">
+        <button class="btn btn-outline btn-sm" onclick="previewVoiceQuestion(this)">🔊 Önizlemeyi Dinle</button>
+        <audio id="voiceq-preview-audio" controls style="display:none;height:36px;flex:1"></audio>
+      </div>
+      <div id="voiceq-preview-status" style="font-size:.78rem;color:rgba(255,255,255,.4);margin-top:.4rem"></div>
+
+      <div style="height:1px;background:var(--border);margin:1rem 0"></div>
+
+      <div class="fg" style="margin:0"><label>Katılımcıya Gösterilecek Soru Metni <span style="font-weight:400;color:rgba(255,255,255,.4)">(sesi dinledikten sonra ekranda çıkacak)</span></label>
+        <input type="text" id="voiceq-displaytext" placeholder="Örn: Bu müşteriye aşağıdaki bilgilerden hangisi verilmelidir?">
+      </div>
+
+      <label style="display:flex;align-items:center;gap:.5rem;margin-top:.8rem;font-size:.85rem;cursor:pointer">
+        <input type="checkbox" id="voiceq-autoplay" checked style="width:16px;height:16px">
+        Ses otomatik çalsın <span style="color:rgba(255,255,255,.4);font-weight:400">(kapalıysa, sınav sırasında host bir butonla sesi manuel başlatır)</span>
+      </label>
+
+      <div style="height:1px;background:var(--border);margin:1rem 0"></div>
+
+      <div class="fg"><label>Yanıt Seçenekleri <span style="font-weight:400;color:rgba(255,255,255,.4)">(doğru olanı işaretleyin, en az 2 şık gerekli)</span></label>
+        <div style="display:flex;flex-direction:column;gap:.6rem" id="voiceq-ans"></div>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:#fff;margin-top:.6rem" id="voiceq-addans-btn" onclick="voiceQAddAns()">+ Şık Ekle</button>
+      </div>
+    </div>
+    <div style="padding:1rem 1.2rem;border-top:1px solid var(--border);display:flex;gap:.8rem">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmVoiceQuestion()">✅ Soruyu Ekle</button>
+      <button class="btn btn-outline" onclick="closeVoiceQuestionModal()">Vazgeç</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ KÜTÜPHANEYE KAYDET MODAL ═══ -->
+<div id="modal-savelib" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:420px;max-width:100%;padding:1.2rem">
+    <div style="font-weight:800;color:var(--tt-cyan);margin-bottom:1rem">💾 Kütüphaneye Kaydet</div>
+    <div class="fg"><label>Sınav Seti Adı</label><input type="text" id="savelib-name"></div>
+    <div class="fg" style="margin-top:.7rem"><label>Proje / Kategori</label><select id="savelib-cat"></select></div>
+    <div style="display:flex;gap:.7rem;margin-top:1.1rem">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmSaveToLibrary(this)">Kaydet</button>
+      <button class="btn btn-outline" onclick="closeSaveLibModal()">Vazgeç</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ RAPORLAR MODAL ═══ -->
+<div id="modal-reports" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:640px;max-width:100%;max-height:82vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
+      <span style="font-size:1.1rem">📊</span>
+      <span style="font-weight:800;color:var(--tt-cyan);flex:1">Oturum Raporları</span>
+      <button onclick="closeReportsModal()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:1rem" id="reports-list">
+      <div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Yükleniyor...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ GERİBİLDİRİM MODAL ═══ -->
+<div id="modal-feedback" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:680px;max-width:100%;max-height:85vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
+      <span style="font-size:1.1rem">🎯</span>
+      <span style="font-weight:800;color:var(--tt-cyan);flex:1">Otomatik Geribildirim</span>
+      <button onclick="closeFeedbackModal()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:1.1rem">
+      <label style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;cursor:pointer;font-size:.9rem">
+        <input type="checkbox" id="fb-enabled" onchange="onFbToggle()" style="width:18px;height:18px">
+        Bu sınavda otomatik geribildirimi kullan
+      </label>
+      <div style="font-size:.8rem;color:rgba(255,255,255,.45);margin-bottom:1rem">
+        Her kural için: hangi sorulara yanlış cevap veren (ya da hiç cevaplamayan) katılımcının, sınav
+        sonunda hangi mesajı/görseli göreceğini belirlersiniz. Bir katılımcı birden fazla kuralı
+        tetiklerse, hepsini alt alta görür.
+      </div>
+      <div id="fb-rules"></div>
+      <button class="btn btn-outline btn-sm" style="width:100%;margin-top:.6rem" onclick="addFbRule()">+ Yeni Kural Ekle</button>
+    </div>
+    <div style="padding:1rem 1.2rem;border-top:1px solid var(--border);display:flex;gap:.8rem">
+      <button class="btn btn-primary" onclick="saveFbRules()" style="flex:1">💾 Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ RADYO PANELİ ═══ -->
+<div id="radio-panel" style="display:none;position:fixed;bottom:5rem;right:1rem;z-index:8000;background:#0d2040;border:1px solid var(--border);border-radius:12px;padding:1rem;min-width:270px;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem">
+    <span style="font-weight:700;color:var(--tt-cyan);font-size:.9rem">📻 Canlı Radyo</span>
+    <button onclick="closeRadio()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1rem">✕</button>
+  </div>
+  <audio id="radio-audio" crossorigin="anonymous"></audio>
+  <div style="display:flex;flex-direction:column;gap:.4rem" id="radio-list"></div>
+  <div style="margin-top:.8rem;display:flex;align-items:center;gap:.6rem;padding-top:.6rem;border-top:1px solid var(--border)">
+    <button id="radio-playbtn" onclick="toggleRadio()" style="background:var(--tt-cyan);border:none;color:#fff;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center">▶</button>
+    <span id="radio-now" style="font-size:.78rem;color:rgba(255,255,255,.6);flex:1">Kanal seçin</span>
+  </div>
+</div>
+
+<!-- ═══ ADMIN PANEL ═══ -->
+<div id="screen-admin" class="screen">
+  <div class="ahdr">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:28px">
+    <span style="font-size:1.1rem;font-weight:800;flex:1">Quiz <span style="color:var(--tt-cyan)">Time</span> <span style="font-size:.8rem;color:rgba(255,255,255,.4);font-weight:600" id="admin-role-label">Yönetici Paneli</span></span>
+    <span style="font-size:.8rem;color:rgba(255,255,255,.6);margin-right:.5rem" id="admin-user-label"></span>
+    <button class="btn btn-sm" style="background:rgba(0,181,226,.15);border:1px solid var(--tt-cyan);color:var(--tt-cyan)" onclick="openAiModal()" title="AI Asistan">🤖 AI</button>
+    <button class="btn btn-sm" style="background:rgba(0,181,226,.15);border:1px solid var(--tt-cyan);color:var(--tt-cyan)" onclick="openReportsModal()" title="Geçmiş Oturum Raporları">📊 Raporlar</button>
+    <button id="btn-users-hdr" class="btn btn-sm" style="display:none;background:rgba(0,181,226,.15);border:1px solid var(--tt-cyan);color:var(--tt-cyan)" onclick="openUsersModal()" title="Kullanıcı Yönetimi">👥 Kullanıcılar</button>
+    <button class="btn btn-sm btn-outline" id="btn-changepw-hdr" onclick="showChangePw()" style="display:none">🔑 Şifre</button>
+    <button class="btn btn-sm btn-outline" onclick="logout()">Çıkış</button>
+    <button class="btn btn-sm btn-success" onclick="openLaunchModal()">▶ Lobiyi Başlat</button>
+  </div>
+  <div class="abody">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <h3>Soru Havuzu (<span id="q-count">0</span>)</h3>
+      <ul class="qlist" id="q-list"></ul>
+      <div style="display:flex;gap:.3rem;width:100%">
+        <button id="btn-add-q" class="btn btn-outline btn-sm" style="flex:1" onclick="addQ()">+ Yeni Soru</button>
+        <button class="btn btn-outline btn-sm" style="padding:.5rem .6rem" title="Alternatif soru türleri" onclick="toggleAddQMenu(event)">▾</button>
+      </div>
+      <div id="add-q-menu" style="display:none;background:#0d2040;border:1px solid var(--border);border-radius:8px;padding:.4rem;margin-top:-.3rem;width:100%;box-sizing:border-box">
+        <div onclick="addQ();closeAddQMenu()" style="padding:.5rem .6rem;cursor:pointer;border-radius:6px;font-size:.82rem" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">📝 Metin Sorusu</div>
+        <div onclick="openVoiceQuestionModal();closeAddQMenu()" style="padding:.5rem .6rem;cursor:pointer;border-radius:6px;font-size:.82rem" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🔊 Sesli Soru</div>
+        <div style="padding:.5rem .6rem;font-size:.76rem;color:rgba(255,255,255,.3);cursor:not-allowed">🖼️ Resimli Soru <span style="font-size:.68rem">(yakında)</span></div>
+        <div style="padding:.5rem .6rem;font-size:.76rem;color:rgba(255,255,255,.3);cursor:not-allowed">🎬 Videolu Soru <span style="font-size:.68rem">(yakında)</span></div>
+      </div>
+      <button id="btn-excel" class="btn btn-primary btn-sm" style="width:100%" onclick="document.getElementById('excel-upload').click()">📊 Excel Yükle</button>
+      <input type="file" id="excel-upload" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(event)">
+      <button id="btn-clear-q" class="btn btn-danger btn-sm" style="width:100%" onclick="clearAllQ()">🗑️ Tüm Soruları Sil</button>
+      <div style="height:1px;background:var(--border);margin:.4rem 0"></div>
+
+      <!-- QUIZ LIBRARY (DB-backed, kategorilere göre gruplu) -->
+      <h3>Sınav Kütüphanesi</h3>
+      <div style="display:flex;gap:.4rem;margin-bottom:.4rem">
+        <input type="text" id="lib-search" placeholder="🔍 İsimle ara..." style="flex:1;min-width:0;padding:.5rem .7rem;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;font-size:.8rem;box-sizing:border-box" oninput="onLibFilterChange()">
+        <button id="lib-filter-toggle" title="Proje / kişi filtresi" onclick="toggleLibFilterPanel()" style="background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;padding:0 .6rem;cursor:pointer;font-size:.9rem">🔽</button>
+      </div>
+      <div id="lib-filter-panel" style="display:none;margin-bottom:.5rem">
+        <div style="display:flex;gap:.4rem;margin-bottom:.4rem">
+          <select id="lib-filter-cat" style="flex:1;min-width:0;padding:.4rem;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:7px;font-size:.75rem" onchange="onLibFilterChange()">
+            <option value="">Tüm Projeler</option>
+          </select>
+          <select id="lib-filter-creator" style="flex:1;min-width:0;padding:.4rem;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:7px;font-size:.75rem" onchange="onLibFilterChange()">
+            <option value="">Herkes</option>
+          </select>
+        </div>
+        <button onclick="clearLibFilters()" style="background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-size:.72rem;padding:0;text-decoration:underline">✕ Proje/kişi filtresini temizle</button>
+      </div>
+      <div class="lib-list" id="lib-list"></div>
+      <button id="btn-save-lib" class="btn btn-outline btn-sm" style="width:100%" onclick="saveToLibrary()">💾 Mevcut Soruları Kaydet</button>
+    </div>
+    <!-- EDITOR -->
+    <div class="editor" id="editor">
+      <div style="text-align:center;color:rgba(255,255,255,.3);margin-top:5rem;font-size:1.1rem">Düzenlemek için sol taraftan bir soru seçin.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ HOST LOBBY ═══ -->
+<div id="screen-host" class="screen">
+  <div style="display:flex;align-items:center;gap:.5rem;opacity:.6;margin-bottom:.5rem">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:20px">
+    <span style="font-size:.75rem;font-weight:800;letter-spacing:.5px">Quiz Time</span>
+  </div>
+  <div class="pin-label">KATILIM KODU</div>
+  <div class="pin-display" id="game-pin">000000</div>
+  <div class="qrwrap" id="qr-container"></div>
+  <div class="pbox">
+    <div style="font-size:.8rem;text-transform:uppercase;letter-spacing:2px;color:rgba(255,255,255,.5);margin-bottom:.8rem">Katılımcılar (<span id="player-count">0</span>)</div>
+    <div class="pchips" id="player-chips">
+      <div style="color:rgba(255,255,255,.3);font-size:.9rem">Bağlantı bekleniyor...</div>
+    </div>
+  </div>
+  <div id="host-info-box" style="display:none;background:rgba(0,181,226,.1);border:1px solid var(--tt-cyan);border-radius:12px;padding:1rem;max-width:520px;margin:1rem 0;text-align:left">
+    <div style="font-weight:800;color:var(--tt-cyan);margin-bottom:.5rem;font-size:.9rem">👋 Hoş geldiniz!</div>
+    <ul style="margin:0;padding-left:1.2rem;font-size:.85rem;color:rgba(255,255,255,.85);line-height:1.7">
+      <li>Doğru cevap kadar <b>hızlı cevap vermek</b> de puanınızı etkiler.</li>
+      <li>Bağlantınız koparsa (sayfa yenilenirse, wifi giderse) <b>aynı isimle tekrar girip</b> kaldığınız yerden devam edebilirsiniz.</li>
+      <li>Kare kod okutamıyorsanız, <b>akademibu.com</b> adresine girip PIN'i elle yazarak katılabilirsiniz.</li>
+      <li>Herkes bağlanana kadar rahatça bekleyebilirsiniz, sınav az sonra başlayacak.</li>
+    </ul>
+    <label style="display:flex;align-items:center;gap:.5rem;margin-top:.8rem;font-size:.78rem;color:rgba(255,255,255,.5);cursor:pointer">
+      <input type="checkbox" onchange="if(this.checked)dismissHostInfoBox()"> Bunu bir daha gösterme
+    </label>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-success" onclick="startGame()" style="font-size:1.1rem;padding:1rem 3rem">🚀 OYUNU BAŞLAT</button>
+    <button class="btn btn-outline" onclick="backToPanel()">İptal</button>
+  </div>
+</div>
+
+<!-- ═══ JOIN ═══ -->
+<div id="screen-join" class="screen">
+  <div class="card">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:36px;margin:0 auto">
+    <div style="font-size:1.3rem;font-weight:800;color:var(--tt-cyan)">Oyuna Bağlan</div>
+    <div>
+      <label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.4rem;text-transform:uppercase;letter-spacing:1.5px;font-weight:700">OTURUM KODU</label>
+      <input class="inp inp-pin" type="text" id="join-pin" maxlength="6" placeholder="______" oninput="this.value=this.value.replace(/\D/g,'')">
+    </div>
+    <div>
+      <label style="font-size:.72rem;color:rgba(255,255,255,.5);display:block;margin-bottom:.4rem;text-transform:uppercase;letter-spacing:1.5px;font-weight:700">ADINIZ SOYADINIZ</label>
+      <input class="inp" type="text" id="join-name" maxlength="20" placeholder="Örn: Ahmet Yılmaz">
+    </div>
+    <button class="btn btn-primary" style="width:100%;font-size:1.05rem" onclick="joinGame()">Katıl →</button>
+    <div class="err-msg" id="join-err"></div>
+  </div>
+  <button class="btn btn-outline btn-sm" onclick="show('landing')" style="margin-top:.8rem">← Geri</button>
+</div>
+
+<!-- ═══ AVATAR ═══ -->
+<div id="screen-avatar" class="screen">
+  <div style="font-size:1.6rem;font-weight:900;color:var(--tt-cyan)">Profilini Seç</div>
+  <div class="av-circle" style="background:rgba(255,255,255,.05)">
+    <svg id="av-svg" viewBox="0 0 100 100" width="150" height="150"></svg>
+  </div>
+  <div class="av-tabs" id="av-tabs"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:480px">
+    <span style="font-size:.8rem;color:rgba(255,255,255,.4)">Bir karakter seç</span>
+    <button class="btn btn-outline btn-sm" onclick="genAvGrid()">🔄 Yenile</button>
+  </div>
+  <div class="av-grid" id="av-grid"></div>
+  <button class="btn btn-primary" style="padding:1rem 3rem;font-size:1.05rem;margin-top:.5rem" onclick="confirmAvatar()">Sahneye Çık ✓</button>
+</div>
+
+<!-- ═══ WAITING ═══ -->
+<div id="screen-waiting" class="screen">
+  <div class="wav" id="w-avatar">
+    <svg id="w-av-svg" viewBox="0 0 100 100" width="130" height="130"></svg>
+  </div>
+  <div style="font-size:2rem;font-weight:900;color:var(--tt-cyan)" id="w-name"></div>
+  <div style="color:rgba(255,255,255,.6)">Oturum yöneticisinin başlatması bekleniyor...</div>
+  <div style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:14px;padding:1.2rem 2.5rem;margin-top:.5rem">
+    <div style="font-size:.7rem;color:rgba(255,255,255,.4);letter-spacing:2px;text-transform:uppercase;margin-bottom:.3rem">BAĞLANTI KODU</div>
+    <div style="font-size:2.2rem;font-weight:900;letter-spacing:8px" id="w-pin"></div>
+  </div>
+</div>
+
+<!-- ═══ HOST QUESTION ═══ -->
+<div id="screen-qhost" class="screen">
+  <div class="qhdr">
+    <div style="flex:1">
+      <div style="font-size:.75rem;color:rgba(255,255,255,.5);margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:1px">SORU <span id="qnum">1</span> / <span id="qtotal">1</span></div>
+      <div class="qprog"><div class="qbar" id="qbar" style="width:100%"></div></div>
+    </div>
+    <div class="tcircle" id="timer-h">20</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column">
+    <div id="all-banner" class="all-banner" style="display:none;margin:1rem 1rem 0">✅ Tüm katılımcılar yanıtladı!</div>
+    <div class="qtxtbox" id="qtxt">Soru Metni</div>
+    <div class="ag4" id="qans-host"></div>
+    <div style="display:flex;gap:.8rem;justify-content:center;padding:0 1rem 1rem;flex-wrap:wrap">
+      <div class="stat-pill">👥 <span id="ans-cnt">0</span> / <span id="tot-pl">0</span> Yanıtladı</div>
+      <div class="stat-pill" id="pts-lbl"></div>
+    </div>
+  </div>
+  <div class="qftr">
+    <button class="btn btn-sm btn-outline" onclick="backToPanel()">Durdur</button>
+    <div style="display:flex;align-items:center;gap:.4rem;opacity:.55">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:18px">
+      <span style="font-size:.72rem;font-weight:800;letter-spacing:.5px">Quiz Time</span>
+    </div>
+    <button class="btn btn-primary" id="reveal-btn" onclick="revealAnswer()" style="padding:.9rem 2.5rem">Yanıtı Göster</button>
+    <button class="btn btn-success" id="next-btn" onclick="goNextOrLB()" style="display:none;padding:.9rem 2.5rem">Devam Et →</button>
+  </div>
+  <!-- PIN rozeti — projektörden izleyen düşen katılımcı buradan PIN'i görebilir -->
+  <div style="position:absolute;bottom:8px;left:12px;background:rgba(0,0,0,.4);border-radius:8px;padding:3px 12px;font-size:.72rem;color:rgba(255,255,255,.5);letter-spacing:.08em;pointer-events:none">
+    📍 PIN: <span id="host-pin-badge">-</span>
+  </div>
+</div>
+
+<!-- ═══ PLAYER QUESTION ═══ -->
+<div id="screen-qplayer" class="screen">
+  <div class="pqhdr">
+    <div style="flex:1">
+      <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:5px;font-weight:700;text-transform:uppercase">SORU <span id="pqnum">1</span></div>
+      <div class="qprog"><div class="qbar" id="pqbar" style="width:100%"></div></div>
+    </div>
+    <div class="tcircle" id="timer-p">20</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column">
+    <div class="pqtxt" id="pqtxt">Soru</div>
+    <div class="paans" id="paans"></div>
+    <div class="pfeedback" id="pfeedback"></div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:center;gap:.4rem;opacity:.4;padding:.6rem 0 1rem">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:16px">
+    <span style="font-size:.68rem;font-weight:800;letter-spacing:.5px">Quiz Time</span>
+  </div>
+</div>
+
+<!-- ═══ LEADERBOARD ═══ -->
+<div id="screen-lb" class="screen">
+  <div class="lbtitle">🏆 Liderlik Tablosu</div>
+  <div class="lbwrap" id="lb-list"></div>
+  <div id="lb-actions" style="display:flex;gap:1rem;flex-wrap:wrap;justify-content:center"></div>
+</div>
+
+<!-- ═══ END ═══ -->
+<div id="screen-end" class="screen">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png" alt="AssisTT" style="height:50px;z-index:1">
+  <div style="font-size:2rem;font-weight:900;z-index:1">Oturum Tamamlandı! 🎉</div>
+  <div class="lbwrap" id="end-lb" style="z-index:1;width:100%;max-width:500px;margin-top:1rem"></div>
+  <div id="end-personal" style="z-index:1;width:100%;max-width:500px;margin-top:.8rem"></div>
+  <div id="end-feedback" style="z-index:1;width:100%;max-width:500px;margin-top:1rem;display:flex;flex-direction:column;gap:.6rem"></div>
+  <button class="btn btn-outline" style="z-index:1;margin-top:1rem" onclick="goHome()">🏠 Ana Ekran</button>
+</div>
+
+<canvas id="confetti-canvas"></canvas>
+
+<!-- ═══ SORU ÖNCESİ GERİ SAYIM ═══ -->
+<div id="countdown-overlay" style="display:none;position:fixed;inset:0;z-index:9997;background:rgba(0,10,25,.92);align-items:center;justify-content:center;flex-direction:column">
+  <div id="countdown-num" style="font-size:9rem;font-weight:900;color:var(--tt-cyan);text-shadow:0 0 40px rgba(0,181,226,.6)"></div>
+  <div style="color:rgba(255,255,255,.5);font-size:1.1rem;font-weight:700;margin-top:.5rem">Sıradaki soru geliyor...</div>
+</div>
+<style>
+@keyframes countPop { 0%{transform:scale(.4);opacity:0} 50%{transform:scale(1.15);opacity:1} 100%{transform:scale(1);opacity:1} }
+#countdown-num.pop{animation:countPop .5s cubic-bezier(.34,1.56,.64,1)}
+@keyframes voiceIconPulse { 0%,100%{transform:scale(1);opacity:.9} 50%{transform:scale(1.18);opacity:1} }
+@keyframes voiceRingPulse { 0%{transform:scale(.85);opacity:.5} 100%{transform:scale(1.4);opacity:0} }
+.voiceq-icon-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:clamp(120px,28vw,180px);height:clamp(120px,28vw,180px)}
+.voiceq-icon-ring{position:absolute;inset:0;border-radius:50%;border:3px solid var(--tt-cyan);animation:voiceRingPulse 1.4s ease-out infinite}
+.voiceq-icon-ring.r2{animation-delay:.5s}
+#voiceq-icon-anim{position:relative;z-index:1;font-size:clamp(3.2rem,12vw,5rem);animation:voiceIconPulse .6s ease-in-out infinite;filter:drop-shadow(0 0 18px rgba(0,181,226,.5))}
+</style>
+
+<!-- ═══ SESLİ SORU İKON/OYNATMA OVERLAY ═══ -->
+<div id="voice-overlay" style="display:none;position:fixed;inset:0;z-index:9996;background:rgba(0,10,25,.92);align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:1.5rem">
+  <div class="voiceq-icon-wrap">
+    <div class="voiceq-icon-ring"></div>
+    <div class="voiceq-icon-ring r2"></div>
+    <div id="voiceq-icon-anim">🔊</div>
+  </div>
+  <div id="voice-overlay-status" style="color:rgba(255,255,255,.7);font-size:1.05rem;font-weight:700;margin-top:1.2rem">Sesli soru...</div>
+  <button id="voice-overlay-trigger-btn" style="display:none;margin-top:1.2rem" class="btn btn-primary" onclick="hostTriggerVoicePlay()">🔊 Sesi Başlat</button>
+  <audio id="voiceq-player" style="display:none"></audio>
+</div>
+
+<button class="music-btn" id="music-btn" onclick="toggleMusic()" title="Müzik">🎵</button>
+<button class="music-btn" onclick="toggleRadioPanel()" title="Canlı Radyo" style="bottom:4rem">📻</button>
+
+<script>
+// ══════════════════════ SOCKET.IO ══════════════════════
+
+// Persist just enough to survive an F5 / dropped connection: which PIN we were
+// in and whether we were the host or a named player. Plain JS vars like
+// gamePin/myPin/myName reset on every reload, so without this the rejoin logic
+// below never fires and people get bounced back to the landing screen.
+const SESSION_KEY = 'quiz_active_session';
+function saveActiveSession(pin, name, host, avatar) {
+  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ pin, name, host, avatar })); } catch(e) {}
+}
+function loadActiveSession() {
+  try { const raw = sessionStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch(e) { return null; }
+}
+function clearActiveSession() {
+  try { sessionStorage.removeItem(SESSION_KEY); } catch(e) {}
+}
+
+// reconnectionAttempts önceden 10'du — kalabalık/zayıf wifi ortamında bir
+// kopma 40 saniyeden uzun sürerse (10 deneme tükenince) socket.io tamamen
+// pes edip bir daha hiç denemiyordu, kişi manuel F5 atmak zorunda kalıyordu.
+// Sınırsız yaptık: bağlantı ne kadar uzun süre koparsa kopsun, wifi geri
+// gelir gelmez kendiliğinden toparlanmaya devam etsin.
+const socket = io({ path: '/api/socket.io', reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
+
+// Host aktif bir sınavın ortasındayken (lobiden bitişe kadar) sekme/tarayıcı
+// kapatılmaya çalışılırsa tarayıcının kendi "Emin misiniz?" uyarısını göster.
+// Not: modern tarayıcılar özel bir metin göstermeye izin vermiyor, sadece
+// preventDefault + returnValue tetiklemek yeterli, tarayıcı kendi standart
+// metnini gösteriyor.
+window.addEventListener('beforeunload', (e) => {
+  if (sessionInProgress) {
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+  }
+});
+socket.on('connect', () => {
+  console.log('Socket bağlandı:', socket.id);
+
+  // Restore who we were before this connection (covers F5 mid-game, both host and player)
+  const saved = loadActiveSession();
+  if (saved && saved.host && saved.pin) {
+    isHost = true; gamePin = saved.pin;
+    socket.emit('rejoin-session', { pin: saved.pin });
+  } else if (saved && !saved.host && saved.pin && saved.name) {
+    myPin = saved.pin; myName = saved.name;
+    if (saved.avatar) { myAvatar = saved.avatar; isReconnectJoin = true; }
+    socket.emit('join-session', { pin: saved.pin, name: saved.name, avatar: myAvatar });
+  } else if (isHost && gamePin) {
+    // Fallback: same-page reconnect (socket dropped without a full reload)
+    socket.emit('rejoin-session', { pin: gamePin });
+  }
+});
+socket.on('connect_error', err => console.error('Bağlantı hatası:', err.message));
+
+// Host dropped → grace period while host reconnects
+socket.on('host-reconnecting', ({ timeoutSec }) => {
+  toast(`⚠️ Yönetici bağlantısı koptu, yeniden bağlanıyor (${timeoutSec}s)...`);
+});
+socket.on('host-reconnected', () => {
+  toast('✅ Yönetici yeniden bağlandı, oyun devam ediyor!');
+});
+// Grace period expired — no host → kick players
+socket.on('host-disconnected', () => { clearActiveSession(); sessionInProgress = false; toast('⚠️ Oturum yöneticisi ayrıldı.'); show('landing'); });
+// Bu event host'un kendi "İptal" işleminde de (host-cancel) tüm odaya
+// broadcast ediliyor — host zaten backToPanel() içinde kendi navigasyonunu
+// yapıyor, burada tekrar show('landing') çağırmak host'u panelden koparıp
+// yanlışlıkla login ekranına atıyordu. Bu yüzden sadece oyuncular için
+// landing'e yönlendiriyoruz.
+socket.on('game-stopped', () => {
+  clearActiveSession();
+  sessionInProgress = false;
+  stopBgMusic();
+  if (justCancelledByMe) { justCancelledByMe = false; return; }
+  toast('⏹ Oturum yönetici tarafından durduruldu.');
+  show('landing');
+});
+
+// Host rejoined their own session after reconnect
+socket.on('session-rejoined', (data) => {
+  toast('✅ Oyun oturumunuza geri döndünüz.');
+  // Restore host state if we left the host screen
+  if (data.pin === gamePin) {
+    document.getElementById('player-count').textContent = String(data.playerCount || 0);
+  }
+});
+socket.on('rejoin-failed', () => {
+  clearActiveSession();
+  toast('⚠️ Oturum bulunamadı, yeniden başlatın.');
+  isHost = false; gamePin = null;
+  show('landing');
+});
+
+// ══════════════════════ AUDIO ENGINE ══════════════════════
+const AC = new (window.AudioContext || window.webkitAudioContext)();
+let musicGain, sfxGain, bgMusicTimer = null, musicOn = true, currentMusicStyle = 'lobby';
+
+function initAudio() {
+  musicGain = AC.createGain(); musicGain.gain.value = 0.1; musicGain.connect(AC.destination);
+  sfxGain   = AC.createGain(); sfxGain.gain.value   = 0.35; sfxGain.connect(AC.destination);
+}
+document.addEventListener('click', () => { if (AC.state === 'suspended') AC.resume(); }, { once: true });
+initAudio();
+
+function playNote(freq, type, dur, vol, dest, delay = 0) {
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.connect(g); g.connect(dest);
+  o.type = type; o.frequency.setValueAtTime(freq, AC.currentTime + delay);
+  g.gain.setValueAtTime(0, AC.currentTime + delay);
+  g.gain.linearRampToValueAtTime(vol, AC.currentTime + delay + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + delay + dur);
+  o.start(AC.currentTime + delay); o.stop(AC.currentTime + delay + dur + 0.05);
+}
+
+// Clean, corporate SFX
+function sfxSelect()   { playNote(660, 'sine', .08, .25, sfxGain); }
+function sfxCorrect()  { [523,659,784].forEach((f,i)=>playNote(f,'sine',.18,.3,sfxGain,i*.1)); }
+function sfxWrong()    { playNote(220,'triangle',.15,.25,sfxGain,0); playNote(185,'triangle',.25,.2,sfxGain,.15); }
+function sfxReveal()   { [400,500,600,700].forEach((f,i)=>playNote(f,'sine',.1,.2,sfxGain,i*.06)); }
+function sfxFanfare()  { [523,659,784,1047].forEach((f,i)=>playNote(f,'sine',.22,.3,sfxGain,i*.13)); }
+function sfxCountdown(){ playNote(880,'sine',.05,.2,sfxGain); }
+
+// ── MUSIC ENGINE (Game-show style, melodic lookahead scheduler) ──────
+// Notes: C major / A minor, 32-step patterns (2 bars of 16th notes)
+// Lobby 112 BPM, Question 126 BPM
+const _BPM = { lobby: 112, question: 126 };
+let _bpm = 112, _step = 0, _nextT = 0, _schedTimer = null;
+const _LOOK = 0.15, _SCHED = 50;
+
+// ── Lobby theme: C major, I-V-vi-IV (bright, uplifting game show) ──
+const PAT_LOBBY = {
+  // Melody: C major pentatonic (C D E G A) – singable, melodic phrases
+  mel:  [523,0,659,0,784,0,880,784, 659,0,784,0,659,587,523,0,
+         349,0,523,0,440,0,523,440, 392,0,440,0,392,330,294,523],
+  // Bass: I – V – vi – IV walking
+  bass: [131,0,0,131,196,0,0,196, 220,0,0,220,175,0,0,175,
+         131,0,0,131,196,0,0,196, 220,0,0,220,175,0,0,175],
+  // Kick: four-on-the-floor
+  kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0, 1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+  // Snare: beats 2 and 4
+  snr:  [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+  // Hi-hat: every 8th note
+  hat:  [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],
+  // Chord stabs: I  V  vi  IV
+  chd:  [[261,330,392],[196,247,294],[220,261,330],[175,220,261]],
+  cp:   [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0, 1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+  steps: 32
+};
+
+// ── Question theme: A minor, Andalusian cadence (Am-G-F-E) – tense ──
+const PAT_QUESTION = {
+  // Melody: A minor pentatonic (A C D E G) – tense, expectant
+  mel:  [659,0,880,0,659,0,784,880, 659,0,587,0,659,0,523,0,
+         440,0,523,659,587,0,659,0, 784,0,659,587,523,0,440,0],
+  // Bass: Am – G – F – E (classic Andalusian, very tense)
+  bass: [220,0,0,220,196,0,0,196, 175,0,0,175,165,0,0,165,
+         220,0,0,220,196,0,0,196, 175,0,0,175,165,0,0,165],
+  // Kick: four-on-the-floor + extra on 3-and
+  kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0, 1,0,0,0,1,0,0,0,1,0,1,0,1,0,0,0],
+  // Snare: 2 and 4
+  snr:  [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+  // Hi-hat: every 16th (driving urgency)
+  hat:  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  // Chord stabs: Am G F E
+  chd:  [[220,261,330],[196,247,294],[175,220,261],[165,208,247]],
+  cp:   [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0, 1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+  steps: 32
+};
+
+function _mk(t) {
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.connect(g);g.connect(musicGain);o.type='sine';
+  o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(35,t+0.18);
+  g.gain.setValueAtTime(0.55,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.25);
+  o.start(t);o.stop(t+0.28);
+}
+function _sn(t) {
+  const g=AC.createGain();g.connect(musicGain);
+  g.gain.setValueAtTime(0.18,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.15);
+  const buf=AC.createBuffer(1,Math.floor(AC.sampleRate*0.15),AC.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,0.6);
+  const s=AC.createBufferSource();s.buffer=buf;s.connect(g);s.start(t);
+  const o=AC.createOscillator(),og=AC.createGain();
+  o.connect(og);og.connect(musicGain);o.type='triangle';o.frequency.value=210;
+  og.gain.setValueAtTime(0.05,t);og.gain.exponentialRampToValueAtTime(0.001,t+0.09);
+  o.start(t);o.stop(t+0.1);
+}
+function _ht(t,open) {
+  const dur=open?0.09:0.018;
+  const g=AC.createGain();g.connect(musicGain);
+  g.gain.setValueAtTime(open?0.018:0.014,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  const buf=AC.createBuffer(1,Math.floor(AC.sampleRate*dur),AC.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  const s=AC.createBufferSource();s.buffer=buf;s.connect(g);s.start(t);
+}
+function _nt(freq,type,dur,vol,t,fc) {
+  if(!freq||vol<=0)return;
+  const o=AC.createOscillator(),g=AC.createGain();
+  if(fc){const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=fc;f.Q.value=0.9;o.connect(f);f.connect(g);}
+  else o.connect(g);
+  g.connect(musicGain);o.type=type;o.frequency.value=freq;
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.018);
+  g.gain.setValueAtTime(vol*0.75,t+dur*0.6);
+  g.gain.exponentialRampToValueAtTime(0.001,t+dur);o.start(t);o.stop(t+dur+0.01);
+}
+function _ch(freqs,dur,vol,t) {
+  freqs.forEach(f=>{
+    const o=AC.createOscillator(),g=AC.createGain();
+    o.connect(g);g.connect(musicGain);o.type='triangle';o.frequency.value=f;
+    g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    o.start(t);o.stop(t+dur+0.01);
+  });
+}
+function _schedStep(step,t,pat,s16) {
+  const i=step%pat.steps;
+  if(pat.kick[i]) _mk(t);
+  if(pat.snr[i])  _sn(t);
+  if(pat.hat[i])  _ht(t, (i%8===6));
+  if(pat.mel[i])  _nt(pat.mel[i],'square',s16*0.8,0.038,t,1800);
+  if(pat.bass[i]) _nt(pat.bass[i],'sawtooth',s16*1.7,0.14,t,400);
+  if(pat.cp[i]) { const ci=Math.floor(i/8)%pat.chd.length; _ch(pat.chd[ci],s16*3.5,0.022,t); }
+}
+function _loop() {
+  if(!musicOn)return;
+  const pat=currentMusicStyle==='question'?PAT_QUESTION:PAT_LOBBY;
+  const s16=60/_bpm/4;
+  while(_nextT<AC.currentTime+_LOOK){_schedStep(_step,_nextT,pat,s16);_nextT+=s16;_step++;}
+  _schedTimer=setTimeout(_loop,_SCHED);
+}
+function startBgMusic(style='lobby') {
+  stopBgMusic(); if(!musicOn)return;
+  currentMusicStyle=style;_bpm=_BPM[style]||112;_step=0;_nextT=AC.currentTime+0.06;_loop();
+}
+function stopBgMusic() { if(_schedTimer){clearTimeout(_schedTimer);_schedTimer=null;} }
+function setBgMusic(s) { startBgMusic(s); }
+function toggleMusic() {
+  musicOn = !musicOn;
+  document.getElementById('music-btn').style.opacity = musicOn ? '1' : '0.4';
+  if (!musicOn) stopBgMusic(); else startBgMusic(currentMusicStyle);
+}
+
+// ══════════════════════ AVATAR ENGINE ══════════════════════
+let myAvatar = { style: 'big-smile', seed: 'AssisTT' };
+let avCurrentStyle = 'big-smile';
+
+const AV_STYLES = [
+  { key:'big-smile',   label:'😁 Neşeli',   bg:'ffdfbf,ffd5dc,c0aede,b6e3f4' },
+  { key:'bottts',      label:'🤖 Robot',    bg:'b6e3f4,c0aede,d1d4f9,bde0fe' },
+  { key:'pixel-art',   label:'🎮 Piksel',   bg:'ffd5dc,ffdfbf,b6e3f4,d1d4f9' },
+  { key:'adventurer',  label:'🧙 Kahraman', bg:'b6e3f4,c0aede,d1d4f9,ffdfbf' },
+  { key:'personas',    label:'✨ Modern',   bg:'ffd5dc,ffdfbf,b6e3f4,c0aede' },
+  { key:'thumbs',      label:'🎨 Renkli',   bg:'fff3bf,b6e3f4,ffd5dc,d1d4f9' },
+  { key:'fun-emoji',   label:'😄 Emoji',    bg:'ffdfbf,ffd5dc,c0aede,b6e3f4' },
+];
+
+function buildAvatarSVG(av, size = 100) {
+  const s = AV_STYLES.find(x => x.key === av.style) || AV_STYLES[0];
+  const url = `https://api.dicebear.com/7.x/${av.style}/svg?seed=${encodeURIComponent(av.seed)}&backgroundColor=${s.bg}`;
+  return `<image href="${url}" width="${size}" height="${size}"/>`;
+}
+function buildAvatarImg(av, size = 40) {
+  const s = AV_STYLES.find(x => x.key === av.style) || AV_STYLES[0];
+  const url = `https://api.dicebear.com/7.x/${av.style}/svg?seed=${encodeURIComponent(av.seed)}&backgroundColor=${s.bg}`;
+  return `<img src="${url}" width="${size}" height="${size}" style="border-radius:50%;display:block;object-fit:cover">`;
+}
+
+// Tabs are generated from AV_STYLES instead of being hand-duplicated in the HTML,
+// so adding/renaming a style only requires touching one place.
+function renderAvTabs() {
+  const wrap = document.getElementById('av-tabs');
+  if (!wrap) return;
+  wrap.innerHTML = AV_STYLES.map((s, i) =>
+    `<button class="av-tab${i === 0 ? ' active' : ''}" onclick="avTab('${s.key}',this)">${s.label}</button>`
+  ).join('');
+}
+renderAvTabs();
+
+function avTab(style, el) {
+  document.querySelectorAll('.av-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  avCurrentStyle = style;
+  genAvGrid();
+}
+function genAvGrid() {
+  const count = 12;
+  const seeds = Array.from({ length: count }, () => Math.random().toString(36).substring(2, 9));
+  const grid = document.getElementById('av-grid');
+  const s = AV_STYLES.find(x => x.key === avCurrentStyle) || AV_STYLES[0];
+  grid.innerHTML = seeds.map((seed) => {
+    const url = `https://api.dicebear.com/7.x/${avCurrentStyle}/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${s.bg}`;
+    return `<div class="av-itm" onclick="selAv('${avCurrentStyle}','${seed}',this)">
+      <img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:10px" loading="lazy">
+    </div>`;
+  }).join('');
+  selAv(avCurrentStyle, seeds[0], grid.firstElementChild);
+}
+function selAv(style, seed, el) {
+  myAvatar = { style, seed };
+  document.querySelectorAll('.av-itm').forEach(e => e.classList.remove('sel'));
+  if (el) el.classList.add('sel');
+  document.getElementById('av-svg').innerHTML = buildAvatarSVG(myAvatar);
+}
+
+// ══════════════════════ AUTH ══════════════════════
+const ADMIN_SICIL_KEY = 'A053252';
+let authToken    = localStorage.getItem('auth_token') || '';
+let currentRole  = localStorage.getItem('auth_role') || '';   // 'admin' | 'full' | 'limited'
+let currentSicil = localStorage.getItem('auth_sicil') || '';
+let currentAdSoyad = localStorage.getItem('auth_adsoyad') || '';
+
+async function apiCall(path, method = 'GET', body = null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (authToken) opts.headers['Authorization'] = 'Bearer ' + authToken;
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch('/api' + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Sunucu hatası');
+  return data;
+}
+
+async function siciLogin() {
+  const sicil = (document.getElementById('login-sicil').value || '').trim().toUpperCase();
+  const pw = document.getElementById('login-pw').value || '';
+  const err = document.getElementById('login-err');
+  if (err) err.style.display = 'none';
+  if (!sicil) { if(err){err.textContent='Sicil numarası girin.';err.style.display='block';} return; }
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sicil, password: pw })
+    });
+    const data = await res.json();
+    if (!res.ok) { if(err){err.textContent=data.error||'Giriş başarısız.';err.style.display='block';} return; }
+    authToken = data.token; currentRole = data.role; currentSicil = data.sicil; currentAdSoyad = data.adSoyad;
+    localStorage.setItem('auth_token', authToken); localStorage.setItem('auth_role', currentRole);
+    localStorage.setItem('auth_sicil', currentSicil); localStorage.setItem('auth_adsoyad', currentAdSoyad);
+    document.getElementById('login-pw').value = ''; document.getElementById('login-sicil').value = '';
+    afterLogin();
+  } catch(e) { if(err){err.textContent=e.message||'Bağlantı hatası.';err.style.display='block';} }
+}
+
+function logout() {
+  authToken = ''; currentRole = ''; currentSicil = ''; currentAdSoyad = '';
+  localStorage.removeItem('auth_token'); localStorage.removeItem('auth_role');
+  localStorage.removeItem('auth_sicil'); localStorage.removeItem('auth_adsoyad');
+  resetPerUserState();
+  show('landing');
+}
+
+// Aynı tarayıcı sekmesinde bir kullanıcı çıkış yapıp başka biri girdiğinde
+// (sayfa yenilenmediği için) önceki kullanıcının AI sohbet geçmişi, AI ile
+// üretilmiş soru önizlemesi ve kaydedilmemiş soru taslağı DOM/localStorage'da
+// kalıp yeni kullanıcıya görünüyordu — hepsini burada temizliyoruz.
+function resetPerUserState() {
+  const chatMsgs = document.getElementById('ai-chat-msgs');
+  if (chatMsgs) chatMsgs.innerHTML = '';
+  const quizResult = document.getElementById('ai-quiz-result');
+  if (quizResult) { quizResult.innerHTML = ''; quizResult.style.display = 'none'; }
+  const topicInput = document.getElementById('ai-topic');
+  if (topicInput) topicInput.value = '';
+  const fileInput = document.getElementById('ai-file-input');
+  if (fileInput) fileInput.value = '';
+  const fileNameEl = document.getElementById('ai-file-name');
+  if (fileNameEl) fileNameEl.textContent = '';
+
+  questions = [];
+  selQIdx = -1;
+  localStorage.removeItem('ql_q');
+  renderQL();
+  const editor = document.getElementById('editor');
+  if (editor) editor.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.3);margin-top:5rem;font-size:1.1rem">Düzenlemek için sol taraftan bir soru seçin.</div>';
+
+  // Kullanıcılar/Raporlar panellerini hızlandırmak için eklediğim cache de
+  // aynı kategoriden bir sızıntı riski taşıyor (bir sonraki kullanıcı, bir
+  // önceki kullanıcının son gördüğü listeyi anlık olarak görebilir) —
+  // o yüzden bunları da temizliyoruz.
+  cachedUsers = [];
+  cachedReportSessions = null;
+
+  // Yarım kalmış bir sesli soru düzenlemesi / önbelleklenmiş ses listesi de
+  // aynı sızıntı riskini taşır.
+  editingVoiceQIdx = null;
+  voiceQGeneratedAudio = null;
+  voiceQGeneratedSnapshot = '';
+  voiceQVoicesCache = null;
+  const voiceModal = document.getElementById('modal-voice-q');
+  if (voiceModal) voiceModal.style.display = 'none';
+
+  resetFeedbackRules();
+}
+
+// Oyunu bitiren host'un bastığı "Ana Ekran" bu fonksiyonu çağırıyor. Giriş
+// yapmış biri (authToken hâlâ localStorage'da duruyorsa) tekrar login ekranına
+// değil, doğrudan kendi paneline (soruların/quiz listesinin göründüğü ekrana)
+// dönmeli. Login olmayan oyuncular için ise zaten landing doğru davranış.
+function goHome() {
+  if (authToken && currentRole) { afterLogin(); }
+  else { show('landing'); }
+}
+
+async function afterLogin() {
+  if (currentRole === 'limited') { await showLimitedPanel(); }
+  else { showAdmin(); }
+}
+
+// ══════════════════════ GAME STATE ══════════════════════
+let questions     = JSON.parse(localStorage.getItem('ql_q') || '[]');
+let quizLibrary   = [];
+let selQIdx=-1, gamePin='', players=[], isHost=false, myName='', myPin='';
+// Host bir sınavı fiilen başlattığında true olur; sekme/tarayıcı kapatılırken
+// beforeunload uyarısı göstermek için kullanılıyor (20-50 kişilik canlı bir
+// sınavın ortasında host'un yanlışlıkla kapatmasına karşı).
+let sessionInProgress = false;
+// Kütüphaneden bir set yüklendiğinde o setin kategorisini hatırlar; "Lobiyi
+// Başlat" penceresi açıldığında kategori seçiciyi buna göre ön-dolduruyoruz
+// (host her seferinde elle seçmek zorunda kalmasın diye).
+let lastLoadedCategory = '';
+// Lobide F5/bağlantı kopması sonrası otomatik yeniden katılım mı, yoksa
+// kullanıcının PIN yazıp elle ilk kez katılması mı olduğunu ayırt eder —
+// birincisinde avatar seçim ekranını tekrar göstermeden direkt bekleme
+// ekranına dönülür (avatar zaten önceden seçilip kaydedilmişti).
+let isReconnectJoin = false;
+// backToPanel() (host'un kendi "İptal" tıklaması) tetiklediği 'game-stopped'
+// broadcast'i kendi client'ına geri döndüğünde, isHost bu noktada zaten
+// senkron olarak false'a çekilmiş oluyor — bu yüzden "isHost mu değil mi"ye
+// bakarak host'un kendi iptalini oyuncu-tarafı davranışından (landing'e
+// atma) ayıramıyoruz. Bu flag o farkı net şekilde tutuyor.
+let justCancelledByMe = false;
+let timerInt=null, timerLeft=20, revealed=false, curQIdx=0;
+let confAnimHost=null, confAnimPlayer=null, curQuestion=null, totalQuestions=0, currentQuizTitle='';
+let myScore=0, myLastChoice=-1;
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('screen-' + id);
+  if (el) el.classList.add('active');
+}
+function toast(m, dur=2800) { const t=document.createElement('div');t.className='toast-c';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),dur); }
+function saveQ() { localStorage.setItem('ql_q', JSON.stringify(questions)); }
+function clearInts() { clearInterval(timerInt); timerInt=null; }
+
+// ══════════════════════ ADMIN ══════════════════════
+function showAdminLogin() { show('admin-login'); setTimeout(()=>document.getElementById('login-sicil')?.focus(), 100); }
+function showAdmin() {
+  clearInts(); stopConfetti(); stopBgMusic(); isHost = false;
+  // Update header labels
+  const roleLabels = { admin:'Süper Yönetici', manager:'Tam Yetki', full:'Editör', limited:'Sınırlı' };
+  const userLabelEl = document.getElementById('admin-user-label');
+  const roleLabelEl = document.getElementById('admin-role-label');
+  if (userLabelEl) userLabelEl.textContent = currentAdSoyad || currentSicil || '';
+  if (roleLabelEl) roleLabelEl.textContent = roleLabels[currentRole] || 'Yönetici Paneli';
+  // User management: admin only
+  const userBtn = document.getElementById('btn-users-hdr');
+  if (userBtn) userBtn.style.display = currentRole === 'admin' ? '' : 'none';
+  // Change password button: admin + full + manager (everyone except limited)
+  const cpwBtn = document.getElementById('btn-changepw-hdr');
+  if (cpwBtn) cpwBtn.style.display = currentRole !== 'limited' ? '' : 'none';
+  // Add question controls: full + manager + admin
+  const canAdd = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'full';
+  ['btn-add-q','btn-excel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = canAdd ? '' : 'none';
+  });
+  // Delete all + save to library: manager + admin only
+  const canManage = currentRole === 'admin' || currentRole === 'manager';
+  ['btn-clear-q','btn-save-lib'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = canManage ? '' : 'none';
+  });
+  show('admin');
+  renderQL();
+  renderLibrary();
+  if (currentRole === 'admin') renderUsers();
+  if (questions.length > 0 && selQIdx < 0) { selQIdx = 0; renderE(0); }
+  else if (selQIdx >= 0 && selQIdx < questions.length) renderE(selQIdx);
+  maybeShowOnboarding();
+}
+
+// İlk kez giriş yapan (admin/full/manager) kullanıcıya, panelin tüm önemli
+// butonlarını kısaca anlatan bir karşılama ekranı gösterir — sadece bir kez,
+// sicile bağlı olarak kalıcı (localStorage). Limited rolü çok daha basit bir
+// ekran gördüğü için (Raporlar/AI/Excel gibi butonlar hiç yok) bu onboarding
+// onlara gösterilmiyor.
+// Onboarding içeriği her önemli özellik eklendiğinde güncelleniyor. Bu sayı
+// artırıldığında, DAHA ÖNCE onboarding'i görmüş kullanıcılar da bir sonraki
+// girişlerinde panели tekrar (bu sefer "Yenilikler" vurgusuyla) görür — "skip"
+// demiş olsalar bile, çünkü bu artık yeni bir bilgi. Hangi versiyonu
+// gördüklerini ayrıca sakladığımız için sonsuz tekrar göstermiyor, sadece
+// versiyon ilerledikçe bir kez daha gösteriyor.
+const ONBOARDING_VERSION = 2; // 1: ilk sürüm — 2: sesli soru eklendi
+
+function maybeShowOnboarding() {
+  if (currentRole === 'limited') return;
+  const key = 'onboarding_seen_v_' + currentSicil;
+  const seenVersion = parseInt(localStorage.getItem(key) || '0', 10);
+  if (seenVersion >= ONBOARDING_VERSION) return;
+  document.getElementById('modal-onboarding').style.display = 'flex';
+}
+function dismissOnboarding() {
+  localStorage.setItem('onboarding_seen_v_' + currentSicil, String(ONBOARDING_VERSION));
+  document.getElementById('modal-onboarding').style.display = 'none';
+}
+// Geribildirim kuralları soru INDEX'lerine göre kurulur (qIdxs: [0,2,5]).
+// Soru seti tamamen değişirse (temizlenirse ya da kütüphaneden farklı bir
+// set yüklenirse) o index'ler artık bambaşka sorulara işaret eder — bu
+// yüzden bu iki durumda kuralları sıfırlıyoruz. Aynı set üzerinde çalışırken
+// (soru ekleme/düzenleme, modalı açıp kapatma) kurallar korunuyor.
+function resetFeedbackRules() {
+  fbEnabled = false;
+  fbRules = [];
+  localStorage.setItem('ql_fb_enabled', 'false');
+  localStorage.setItem('ql_fb_rules', '[]');
+  const badge = document.getElementById('fb-badge');
+  if (badge) badge.style.display = 'none';
+}
+
+function clearAllQ() { if(!confirm(`${questions.length} sorunun tamamını silmek istediğinizden emin misiniz?`))return;questions=[];selQIdx=-1;lastLoadedCategory='';saveQ();renderQL();resetFeedbackRules();document.getElementById('editor').innerHTML='<div style="text-align:center;color:rgba(255,255,255,.3);margin-top:5rem;font-size:1.1rem">Düzenlemek için sol taraftan bir soru seçin.</div>';toast('Tüm sorular silindi'); }
+
+function renderQL() {
+  document.getElementById('q-count').textContent = questions.length;
+  const ul = document.getElementById('q-list');
+  const canDelete = currentRole === 'admin' || currentRole === 'manager';
+  if (!questions.length) { ul.innerHTML='<div style="color:rgba(255,255,255,.3);padding:.8rem;font-size:.85rem">Henüz soru yok</div>';return; }
+  ul.innerHTML = questions.map((q,i)=>`<li class="qi ${i===selQIdx?'active':''}" onclick="selQ(${i})">
+    <div class="qnum">${i+1}</div>
+    <div class="qtx">${q.text||'(Boş)'}</div>
+    ${canDelete ? `<span onclick="delQ(event,${i})" style="color:var(--bad);cursor:pointer;padding:4px;font-weight:900;font-size:1rem" title="Sil">✕</span>` : ''}
+  </li>`).join('');
+}
+function selQ(i) { selQIdx=i;renderQL();renderE(i); }
+function renderE(i) {
+  const q = questions[i];
+  const isVoice = q.questionType === 'voice';
+  document.getElementById('editor').innerHTML = `
+  <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:1.2rem">
+    <span style="font-size:1rem;font-weight:800;color:var(--tt-cyan)">Soru ${i+1} Düzenle</span>
+    ${isVoice ? `<span style="background:rgba(0,181,226,.2);color:var(--tt-cyan);border-radius:20px;padding:.2rem .7rem;font-size:.72rem;font-weight:700">🔊 Sesli Soru</span>` : ''}
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:#fff;margin-left:auto" onclick="moveQ(${i},-1)">↑ Yukarı</button>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:#fff" onclick="moveQ(${i},1)">↓ Aşağı</button>
+  </div>
+  ${isVoice ? `
+  <div style="background:rgba(0,181,226,.08);border:1px solid var(--tt-cyan);border-radius:10px;padding:.8rem;margin-bottom:1rem">
+    <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:.4rem">Seslendirilen senaryo metni:</div>
+    <div style="font-size:.88rem;font-style:italic;margin-bottom:.6rem">"${escHtml(q.voiceScript||'')}"</div>
+    <audio controls src="${q.audioData||''}" style="width:100%;height:36px"></audio>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:#fff;margin-top:.6rem" onclick="openVoiceQuestionModal(${i})">🔁 Sesi/Senaryoyu Yeniden Düzenle</button>
+    <div style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.5rem">Aşağıdaki "Soru Metni" alanı, ses dinlendikten sonra katılımcıya gösterilen metindir — senaryonun kendisi değil.</div>
+  </div>` : ''}
+  <div class="fg"><label>Soru Metni</label><textarea rows="3" id="e-text" placeholder="Soruyu yazın...">${q.text||''}</textarea></div>
+  <div class="egrid" style="margin-bottom:1rem">
+    <div class="fg" style="margin:0"><label>Süre (Saniye)</label><input type="number" id="e-time" value="${q.time||20}" min="5" max="120"></div>
+    <div class="fg" style="margin:0"><label>Puan Çarpanı</label><select id="e-pts">
+      <option value="standard" ${q.pts==='standard'?'selected':''}>Standart (1x)</option>
+      <option value="double" ${q.pts==='double'?'selected':''}>Çift Puan (2x)</option>
+      <option value="none" ${q.pts==='none'?'selected':''}>Puansız</option>
+    </select></div>
+  </div>
+  <div class="fg"><label>Yanıt Seçenekleri <span style="font-weight:400;color:rgba(255,255,255,.4)">(doğru olanı işaretleyin, en az 2 şık gerekli)</span></label>
+    <div style="display:flex;flex-direction:column;gap:.6rem" id="e-ans">
+    ${q.answers.map((a,j)=>`<div class="abox ${a.correct?'correct':''}" id="ebox-${j}">
+      <div class="adot d${['a','b','c','d'][j]||'a'}"></div>
+      <input type="text" placeholder="${j+1}. şık" value="${a.text||''}" id="eans-${j}">
+      <div class="ct" onclick="togC(${j})">${a.correct?'✓':''}</div>
+      ${q.answers.length>2?`<span onclick="removeAns(${i},${j})" style="color:var(--bad);cursor:pointer;padding:0 .4rem;font-weight:900" title="Bu şıkkı sil">✕</span>`:''}
+    </div>`).join('')}
+    </div>
+    ${q.answers.length<4?`<button class="btn btn-sm" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:#fff;margin-top:.6rem" onclick="addAns(${i})">+ Şık Ekle</button>`:''}
+  </div>
+  <div style="display:flex;gap:.8rem;margin-top:1rem">
+    <button class="btn btn-primary" onclick="saveQ2(${i})">💾 Kaydet</button>
+    ${(currentRole==='admin'||currentRole==='manager') ? `<button class="btn btn-danger btn-sm" onclick="delQ(null,${i})">Sil</button>` : ''}
+  </div>`;
+}
+// Editörde henüz kaydedilmemiş satır içi düzenlemeyi kaybetmemek için, şık
+// ekleme/çıkarma öncesi mevcut input değerlerini/işaretli doğru şıkları
+// diziye geri yazıp öyle yeniden çiziyoruz.
+function syncAnsFromDOM(i){
+  const boxes=[...document.querySelectorAll('#e-ans .abox')];
+  questions[i].answers=boxes.map((b,j)=>({
+    text:(document.getElementById('eans-'+j)?.value||'').trim(),
+    correct:b.classList.contains('correct'),
+  }));
+}
+function addAns(i){
+  syncAnsFromDOM(i);
+  if(questions[i].answers.length>=4){toast('En fazla 4 şık olabilir (oyun ekranı 4 renk/şekil destekliyor).');return;}
+  questions[i].answers.push({text:'',correct:false});
+  renderE(i);
+}
+function removeAns(i,j){
+  syncAnsFromDOM(i);
+  if(questions[i].answers.length<=2){toast('En az 2 şık kalmalı.');return;}
+  questions[i].answers.splice(j,1);
+  renderE(i);
+}
+function togC(j){const b=document.getElementById('ebox-'+j);const t=b.querySelector('.ct');b.classList.toggle('correct');t.textContent=b.classList.contains('correct')?'✓':'';}
+function saveQ2(i){
+  const text=document.getElementById('e-text').value.trim();
+  const time=parseInt(document.getElementById('e-time').value)||20;
+  const pts=document.getElementById('e-pts').value;
+  // Sabit 4 yerine, editörde o an gerçekte kaç şık kutusu varsa onları oku —
+  // aksi halde 2 ya da 3 şıklı bir soruda (ör. Doğru/Yanlış) var olmayan
+  // eans-2/eans-3 kutularını okumaya çalışıp sessizce hata verip hiç
+  // kaydetmiyordu.
+  const boxCount=document.querySelectorAll('#e-ans .abox').length;
+  const answers=Array.from({length:boxCount},(_,j)=>({text:document.getElementById('eans-'+j).value.trim(),correct:document.getElementById('ebox-'+j).classList.contains('correct')}));
+  if(!text){toast('Soru metni boş!');return;}
+  if(answers.filter(a=>a.text!=='').length<2){toast('En az 2 dolu şık olmalı!');return;}
+  if(!answers.some(a=>a.correct)){toast('En az bir doğru şık işaretleyin!');return;}
+  // Sesli soru meta verilerini (questionType, audioData, voiceScript vb.) koru —
+  // bu editör sadece metin/süre/puan/şıkları düzenliyor, sesin kendisini değil.
+  const prevMeta = questions[i]?.questionType === 'voice'
+    ? { questionType: questions[i].questionType, voiceScript: questions[i].voiceScript, voiceEmotion: questions[i].voiceEmotion, voiceId: questions[i].voiceId, audioData: questions[i].audioData, audioAutoplay: questions[i].audioAutoplay }
+    : {};
+  questions[i]={text,time,pts,answers,...prevMeta};saveQ();renderQL();toast('Soru kaydedildi ✓');
+}
+function toggleAddQMenu(e) {
+  e.stopPropagation();
+  const m = document.getElementById('add-q-menu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+function closeAddQMenu() { document.getElementById('add-q-menu').style.display = 'none'; }
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('add-q-menu');
+  if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) closeAddQMenu();
+});
+
+function addQ(){questions.push({text:'',time:20,pts:'standard',answers:[{text:'',correct:false},{text:'',correct:false},{text:'',correct:false},{text:'',correct:false}]});saveQ();selQIdx=questions.length-1;renderQL();renderE(selQIdx);}
+
+// ══════════════════════ SESLİ SORU (TTS) ══════════════════════
+let voiceQAnswers = [];
+let voiceQVoicesCache = null;
+let voiceQGeneratedAudio = null;   // son üretilen önizlemenin ses verisi
+let voiceQGeneratedSnapshot = '';  // önizlemenin hangi girdilerle üretildiğini takip eder
+let editingVoiceQIdx = null;       // null = yeni soru, sayı = mevcut soruyu düzenliyor
+
+async function openVoiceQuestionModal(editIdx) {
+  editingVoiceQIdx = (typeof editIdx === 'number') ? editIdx : null;
+  const isEdit = editingVoiceQIdx !== null;
+  document.getElementById('voiceq-modal-title').textContent = isEdit ? 'Sesli Soruyu Düzenle' : 'Sesli Soru Oluştur';
+
+  const existing = isEdit ? questions[editingVoiceQIdx] : null;
+  document.getElementById('voiceq-script').value = existing?.voiceScript || '';
+  document.getElementById('voiceq-displaytext').value = existing?.text || '';
+  document.getElementById('voiceq-emotion').value = existing?.voiceEmotion || 'notr';
+  document.getElementById('voiceq-autoplay').checked = existing ? !!existing.audioAutoplay : true;
+  document.getElementById('voiceq-charcount').textContent = (existing?.voiceScript || '').length;
+  document.getElementById('voiceq-preview-status').textContent = '';
+  const audioEl = document.getElementById('voiceq-preview-audio');
+  audioEl.style.display = 'none'; audioEl.removeAttribute('src');
+
+  voiceQAnswers = existing ? JSON.parse(JSON.stringify(existing.answers)) : [{text:'',correct:false},{text:'',correct:false}];
+  voiceQGeneratedAudio = existing?.audioData || null;
+  voiceQGeneratedSnapshot = existing ? voiceQSnapshot() : '';
+  renderVoiceQAnswers();
+
+  document.getElementById('modal-voice-q').style.display = 'flex';
+  document.getElementById('voiceq-script').oninput = () => {
+    document.getElementById('voiceq-charcount').textContent = document.getElementById('voiceq-script').value.length;
+  };
+
+  await loadVoiceQVoiceOptions(existing?.voiceId);
+}
+function closeVoiceQuestionModal() {
+  document.getElementById('modal-voice-q').style.display = 'none';
+  editingVoiceQIdx = null;
+}
+
+async function loadVoiceQVoiceOptions(selectedId) {
+  const sel = document.getElementById('voiceq-voice');
+  if (voiceQVoicesCache) { renderVoiceOptions(sel, selectedId); return; }
+  sel.innerHTML = '<option value="">Yükleniyor...</option>';
+  try {
+    voiceQVoicesCache = await apiCall('/ai/tts-voices');
+    renderVoiceOptions(sel, selectedId);
+  } catch(e) {
+    sel.innerHTML = '<option value="">Yüklenemedi</option>';
+    toast('Ses listesi alınamadı: ' + e.message);
+  }
+}
+function renderVoiceOptions(sel, selectedId) {
+  if (!voiceQVoicesCache || !voiceQVoicesCache.length) { sel.innerHTML = '<option value="">Ses bulunamadı</option>'; return; }
+  const genderLabel = { male: '♂', female: '♀' };
+  sel.innerHTML = voiceQVoicesCache.map(v => {
+    const g = genderLabel[v.gender] || '';
+    const age = v.age ? ` · ${escHtml(v.age)}` : '';
+    return `<option value="${v.id}">${g} ${escHtml(v.name)}${age}</option>`;
+  }).join('');
+  if (selectedId) sel.value = selectedId;
+}
+
+function renderVoiceQAnswers() {
+  const wrap = document.getElementById('voiceq-ans');
+  wrap.innerHTML = voiceQAnswers.map((a,j)=>`<div class="abox ${a.correct?'correct':''}" id="vqbox-${j}">
+    <div class="adot d${['a','b','c','d'][j]||'a'}"></div>
+    <input type="text" placeholder="${j+1}. şık" value="${escHtml(a.text||'')}" id="vqans-${j}" oninput="voiceQAnswers[${j}].text=this.value">
+    <div class="ct" onclick="voiceQTogC(${j})">${a.correct?'✓':''}</div>
+    ${voiceQAnswers.length>2?`<span onclick="voiceQRemoveAns(${j})" style="color:var(--bad);cursor:pointer;padding:0 .4rem;font-weight:900" title="Bu şıkkı sil">✕</span>`:''}
+  </div>`).join('');
+  document.getElementById('voiceq-addans-btn').style.display = voiceQAnswers.length < 4 ? '' : 'none';
+}
+function voiceQTogC(j) {
+  const b = document.getElementById('vqbox-'+j);
+  const t = b.querySelector('.ct');
+  b.classList.toggle('correct');
+  t.textContent = b.classList.contains('correct') ? '✓' : '';
+  voiceQAnswers[j].correct = b.classList.contains('correct');
+}
+function voiceQAddAns() {
+  if (voiceQAnswers.length >= 4) return;
+  voiceQAnswers.push({text:'',correct:false});
+  renderVoiceQAnswers();
+}
+function voiceQRemoveAns(j) {
+  if (voiceQAnswers.length <= 2) return;
+  voiceQAnswers.splice(j,1);
+  renderVoiceQAnswers();
+}
+
+// Girdilerin (script+duygu+ses) bir "parmak izi" — önizleme üretildikten
+// sonra bu alanlardan biri değişirse, eski (artık uyumsuz) önizleme sesini
+// soruya eklemeyi engellemek için kullanılıyor.
+function voiceQSnapshot() {
+  return [
+    document.getElementById('voiceq-script').value.trim(),
+    document.getElementById('voiceq-emotion').value,
+    document.getElementById('voiceq-voice').value,
+  ].join('|');
+}
+
+async function previewVoiceQuestion(btn) {
+  const script = document.getElementById('voiceq-script').value.trim();
+  const voiceId = document.getElementById('voiceq-voice').value;
+  const emotion = document.getElementById('voiceq-emotion').value;
+  const statusEl = document.getElementById('voiceq-preview-status');
+
+  if (!script) { toast('Seslendirilecek metni yazın'); return; }
+  if (!voiceId) { toast('Bir ses seçin'); return; }
+
+  const restore = setBtnLoading(btn, '⏳ Ses üretiliyor...');
+  statusEl.textContent = '';
+  try {
+    const data = await apiCall('/ai/tts-generate', 'POST', { text: script, voiceId, emotion });
+    voiceQGeneratedAudio = data.audioData;
+    voiceQGeneratedSnapshot = voiceQSnapshot();
+    const audioEl = document.getElementById('voiceq-preview-audio');
+    audioEl.src = voiceQGeneratedAudio;
+    audioEl.style.display = 'block';
+    audioEl.play().catch(()=>{});
+    statusEl.innerHTML = '<span style="color:var(--ok)">✓ Önizleme hazır, dinleyip onaylayabilirsiniz.</span>';
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--bad)">❌ ${escHtml(e.message || 'Ses üretilemedi')}</span>`;
+  } finally { restore(); }
+}
+
+function confirmVoiceQuestion() {
+  const script = document.getElementById('voiceq-script').value.trim();
+  const displayText = document.getElementById('voiceq-displaytext').value.trim();
+  const voiceId = document.getElementById('voiceq-voice').value;
+  const emotion = document.getElementById('voiceq-emotion').value;
+  const autoplay = document.getElementById('voiceq-autoplay').checked;
+
+  if (!script) { toast('Seslendirilecek metni yazın'); return; }
+  if (!displayText) { toast('Katılımcıya gösterilecek soru metnini yazın'); return; }
+  if (!voiceQGeneratedAudio || voiceQGeneratedSnapshot !== voiceQSnapshot()) {
+    toast('Önce "Önizlemeyi Dinle" ile sesi üretip onaylayın (metin/duygu/ses değiştiyse yeniden üretmeniz gerekir)');
+    return;
+  }
+  const filledAnswers = voiceQAnswers.filter(a => a.text.trim() !== '');
+  if (filledAnswers.length < 2) { toast('En az 2 dolu şık olmalı!'); return; }
+  if (!voiceQAnswers.some(a => a.correct)) { toast('En az bir doğru şık işaretleyin!'); return; }
+
+  const questionObj = {
+    text: displayText,
+    time: 20,
+    pts: 'standard',
+    answers: voiceQAnswers,
+    questionType: 'voice',
+    voiceScript: script,
+    voiceEmotion: emotion,
+    voiceId,
+    audioData: voiceQGeneratedAudio,
+    audioAutoplay: autoplay,
+  };
+
+  if (editingVoiceQIdx !== null) {
+    // Süreyi/puan çarpanını korumak için mevcut sorunun üzerine yaz
+    questionObj.time = questions[editingVoiceQIdx].time || 20;
+    questionObj.pts = questions[editingVoiceQIdx].pts || 'standard';
+    questions[editingVoiceQIdx] = questionObj;
+    selQIdx = editingVoiceQIdx;
+  } else {
+    questions.push(questionObj);
+    selQIdx = questions.length - 1;
+  }
+  saveQ(); renderQL(); renderE(selQIdx);
+  closeVoiceQuestionModal();
+  toast('🔊 Sesli soru eklendi ✓');
+}
+function delQ(e,i){
+  if(e)e.stopPropagation();
+  const canDelete = currentRole==='admin'||currentRole==='manager';
+  if(!canDelete){toast('Bu işlem için yetkiniz yok!');return;}
+  if(!confirm('Bu soruyu silmek istiyor musunuz?'))return;
+  questions.splice(i,1);saveQ();selQIdx=Math.max(-1,Math.min(selQIdx,questions.length-1));renderQL();if(selQIdx>=0)renderE(selQIdx);else document.getElementById('editor').innerHTML='<div style="text-align:center;color:rgba(255,255,255,.3);margin-top:5rem">Soru seçin veya ekleyin.</div>';
+}
+function moveQ(i,d){const j=i+d;if(j<0||j>=questions.length)return;[questions[i],questions[j]]=[questions[j],questions[i]];saveQ();selQIdx=j;renderQL();renderE(j);}
+
+// ══════════════════════ QUIZ LIBRARY (DB-backed) ══════════════════════
+const LIB_CATEGORIES = ["TT Mobil", "TTNET", "Özel Projeler", "Yetkinlik", "Buz Kırıcı"];
+
+function saveToLibrary() {
+  if (!questions.length) { toast('Kaydedilecek soru yok!'); return; }
+  document.getElementById('savelib-name').value = `Sınav ${quizLibrary.length + 1}`;
+  document.getElementById('savelib-cat').innerHTML = LIB_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('modal-savelib').style.display = 'flex';
+  setTimeout(() => document.getElementById('savelib-name')?.focus(), 100);
+}
+function closeSaveLibModal() { document.getElementById('modal-savelib').style.display = 'none'; }
+// Bazı async butonlarda (özellikle yavaş bağlantılarda) tıklayınca hiçbir
+// görsel geri bildirim olmaması, kullanıcının "çalışmadı" sanıp tekrar tekrar
+// basmasına yol açıyordu — bu da bazen aynı kaydın birden fazla gönderilmesine
+// neden olabiliyordu. Bu yardımcı, butonu anında devre dışı bırakıp yükleniyor
+// metni gösteriyor, işlem bitince (başarılı ya da başarısız) eski haline döner.
+function setBtnLoading(btn, loadingText) {
+  if (!btn) return () => {};
+  const original = btn.innerHTML;
+  const wasDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.innerHTML = loadingText;
+  return () => { btn.disabled = wasDisabled; btn.innerHTML = original; };
+}
+
+async function confirmSaveToLibrary(btn) {
+  const name = (document.getElementById('savelib-name').value || '').trim();
+  const category = document.getElementById('savelib-cat').value;
+  if (!name) { toast('Bir isim girin!'); return; }
+  const restore = setBtnLoading(btn, '⏳ Kaydediliyor...');
+  try {
+    await apiCall('/question-sets', 'POST', { name, questions, category });
+    await renderLibrary();
+    closeSaveLibModal();
+    toast(`"${name}" veritabanına kaydedildi ✓`);
+  } catch(e) { toast('Kayıt başarısız: ' + e.message); }
+  finally { restore(); }
+}
+function loadLibrary(id) {
+  const set = quizLibrary.find(s => s.id === id);
+  if (!set) return;
+  if (!confirm(`"${set.name}" setini yüklemek mevcut soruların üzerine yazacak. Devam edilsin mi?`)) return;
+  questions = JSON.parse(JSON.stringify(set.questions));
+  lastLoadedCategory = set.category || '';
+  saveQ(); selQIdx = questions.length > 0 ? 0 : -1; renderQL();
+  resetFeedbackRules();
+  if (selQIdx >= 0) renderE(selQIdx);
+  toast(`"${set.name}" yüklendi ✓`);
+}
+async function deleteLibrary(id) {
+  const set = quizLibrary.find(s => s.id === id);
+  if (!set) return;
+  if (!confirm(`"${set.name}" kütüphaneden silinsin mi?`)) return;
+  try {
+    await apiCall('/question-sets/' + set.id, 'DELETE');
+    await renderLibrary();
+    toast('Set silindi');
+  } catch(e) { toast('Silinemedi: ' + e.message); }
+}
+// Hangi kategori kartlarının açık olduğunu hatırlar (sayfa içinde kalıcı,
+// yeniden render'da da korunur — kullanıcı bir kategoriyi açtıysa listeyi
+// her yenilemede tekrar kapatıp onu rahatsız etmeyelim).
+let libExpandedCats = {};
+function toggleLibCat(cat) {
+  libExpandedCats[cat] = !libExpandedCats[cat];
+  renderLibraryList();
+}
+async function renderLibrary() {
+  const el = document.getElementById('lib-list');
+  if (!el) return;
+  el.innerHTML = '<div style="color:rgba(255,255,255,.3);font-size:.75rem;padding:.4rem">Yükleniyor...</div>';
+  try {
+    quizLibrary = await apiCall('/question-sets');
+    // Filtre dropdown'larını mevcut veriden doldur (seçili değeri koru)
+    const catSel = document.getElementById('lib-filter-cat');
+    const creatorSel = document.getElementById('lib-filter-creator');
+    if (catSel) {
+      const curCat = catSel.value;
+      const cats = [...new Set(quizLibrary.map(s => s.category || 'Diğer'))];
+      const ordered = [...LIB_CATEGORIES, ...cats.filter(c => !LIB_CATEGORIES.includes(c))].filter(c => cats.includes(c));
+      catSel.innerHTML = '<option value="">Tüm Projeler</option>' + ordered.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+      catSel.value = curCat;
+    }
+    if (creatorSel) {
+      const curCreator = creatorSel.value;
+      const creators = [...new Set(quizLibrary.map(s => s.createdByName || s.createdBy).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'tr'));
+      creatorSel.innerHTML = '<option value="">Herkes</option>' + creators.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+      creatorSel.value = curCreator;
+    }
+    renderLibraryList();
+  } catch(e) { el.innerHTML = '<div style="color:var(--bad);font-size:.8rem;padding:.4rem">Yüklenemedi</div>'; }
+}
+function onLibFilterChange() { renderLibraryList(); }
+function toggleLibFilterPanel() {
+  const panel = document.getElementById('lib-filter-panel');
+  const btn = document.getElementById('lib-filter-toggle');
+  const open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if (btn) btn.style.background = open ? 'rgba(255,255,255,.07)' : 'var(--tt-cyan)';
+}
+function clearLibFilters() {
+  const cat = document.getElementById('lib-filter-cat');
+  const creator = document.getElementById('lib-filter-creator');
+  if (cat) cat.value = '';
+  if (creator) creator.value = '';
+  renderLibraryList();
+}
+function renderLibraryList() {
+  const el = document.getElementById('lib-list');
+  if (!el) return;
+  if (!quizLibrary.length) { el.innerHTML='<div style="color:rgba(255,255,255,.3);font-size:.8rem;padding:.4rem">Henüz kaydedilen set yok</div>';return; }
+
+  const searchText = (document.getElementById('lib-search')?.value || '').trim().toLowerCase();
+  const filterCat = document.getElementById('lib-filter-cat')?.value || '';
+  const filterCreator = document.getElementById('lib-filter-creator')?.value || '';
+  const isFiltering = !!(searchText || filterCat || filterCreator);
+
+  const filtered = quizLibrary.filter(s => {
+    if (searchText && !s.name.toLowerCase().includes(searchText)) return false;
+    if (filterCat && (s.category || 'Diğer') !== filterCat) return false;
+    if (filterCreator && (s.createdByName || s.createdBy) !== filterCreator) return false;
+    return true;
+  });
+
+  if (!filtered.length) { el.innerHTML = '<div style="color:rgba(255,255,255,.3);font-size:.8rem;padding:.4rem">Filtreyle eşleşen sınav yok</div>'; return; }
+
+  const canDelete = currentRole === 'admin' || currentRole === 'manager';
+  const groups = {};
+  filtered.forEach(s => { const c = s.category || 'Diğer'; (groups[c] = groups[c] || []).push(s); });
+  const orderedCats = [...LIB_CATEGORIES, ...Object.keys(groups).filter(c => !LIB_CATEGORIES.includes(c))];
+  el.innerHTML = orderedCats.filter(c => groups[c]?.length).map(cat => {
+    // Aktif bir filtre varken sonuçları görmek için kategoriyi otomatik aç —
+    // ama bunu kalıcı olarak libExpandedCats'e yazmıyoruz, filtre kalkınca
+    // kullanıcının önceki aç/kapalı tercihi geri gelsin.
+    const open = isFiltering ? true : !!libExpandedCats[cat];
+    const items = groups[cat];
+    return `<div class="lib-cat" style="margin-bottom:.4rem">
+      <div onclick="toggleLibCat('${cat.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:.4rem;padding:.5rem .4rem;cursor:pointer;background:rgba(255,255,255,.04);border-radius:7px;font-size:.82rem;font-weight:700">
+        <span style="transition:transform .15s;display:inline-block;transform:rotate(${open?90:0}deg)">▶</span>
+        <span style="flex:1">${escHtml(cat)}</span>
+        <span style="color:rgba(255,255,255,.4);font-weight:400;font-size:.75rem">${items.length}</span>
+      </div>
+      ${open ? items.map(s => `<div class="lib-item" style="margin-left:.6rem">
+        <span class="lib-name" title="${escHtml(s.name)}" style="white-space:normal;overflow:visible;text-overflow:clip">
+          ${escHtml(s.name)} <span style="color:rgba(255,255,255,.35)">(${(s.questions||[]).length} soru)</span>
+          <div style="font-size:.68rem;color:rgba(255,255,255,.35);font-weight:400">${escHtml(s.createdByName || s.createdBy || '')}${s.createdAt ? ' · ' + new Date(s.createdAt).toLocaleDateString('tr-TR') : ''}</div>
+        </span>
+        <button class="btn btn-sm btn-primary" style="padding:.3rem .7rem;font-size:.75rem" onclick="loadLibrary(${s.id})">Yükle</button>
+        ${canDelete ? `<button class="btn btn-sm btn-danger" style="padding:.3rem .6rem;font-size:.75rem" onclick="deleteLibrary(${s.id})">✕</button>` : ''}
+      </div>`).join('') : ''}
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════ USER MANAGEMENT (Admin only) ══════════════════════
+function openUsersModal() {
+  document.getElementById('modal-users').style.display = 'flex';
+  if (cachedUsers.length) renderUserList();
+  renderUsers();
+  renderLockedAccounts();
+}
+async function renderLockedAccounts() {
+  const section = document.getElementById('locked-accounts-section');
+  const list = document.getElementById('locked-list');
+  if (!section || !list) return;
+  try {
+    const locked = await apiCall('/users/locked');
+    if (!locked.length) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    list.innerHTML = locked.map(l => `<div class="lib-item">
+      <span class="lib-name">${escHtml(l.sicil)} <span style="color:rgba(255,255,255,.4)">(~${l.remainingMinutes} dk sonra otomatik açılır)</span></span>
+      <button class="btn btn-sm btn-primary" style="padding:.3rem .7rem;font-size:.75rem" onclick="unlockAccount('${l.sicil.replace(/'/g,"\\'")}')">🔓 Kilidi Aç</button>
+    </div>`).join('');
+  } catch(e) { section.style.display = 'none'; }
+}
+async function unlockAccount(sicil) {
+  try {
+    await apiCall('/users/' + encodeURIComponent(sicil) + '/unlock', 'POST');
+    toast(`${sicil} kilidi açıldı ✓`);
+    renderLockedAccounts();
+  } catch(e) { toast('Kilit açılamadı: ' + e.message); }
+}
+function closeUsersModal() { document.getElementById('modal-users').style.display = 'none'; }
+let cachedUsers = [];
+async function renderUsers() {
+  const el = document.getElementById('user-list');
+  if (!el) return;
+  // Cache zaten doluysa (modal daha önce açılmışsa) "Yükleniyor..." ile
+  // ekranı boşaltıp yeniden doldurmuyoruz — mevcut liste ekranda kalırken
+  // arka planda sessizce tazeleniyor, gecikme hissi olmuyor.
+  if (!cachedUsers.length) {
+    el.innerHTML = '<div style="color:rgba(255,255,255,.3);font-size:.75rem;padding:.4rem">Yükleniyor...</div>';
+  }
+  try {
+    cachedUsers = await apiCall('/users');
+    renderUserList();
+  } catch(e) {
+    if (!cachedUsers.length) el.innerHTML = '<div style="color:var(--bad);font-size:.8rem">Yüklenemedi</div>';
+  }
+}
+function renderUserList() {
+  const el = document.getElementById('user-list');
+  if (!el) return;
+  if (!cachedUsers.length) { el.innerHTML = '<div style="color:rgba(255,255,255,.3);font-size:.8rem;padding:.4rem">Henüz kullanıcı yok</div>'; return; }
+  const search = (document.getElementById('user-search')?.value || '').trim().toLowerCase();
+  const filtered = search
+    ? cachedUsers.filter(u => u.sicil.toLowerCase().includes(search) || u.adSoyad.toLowerCase().includes(search))
+    : cachedUsers;
+  if (!filtered.length) { el.innerHTML = '<div style="color:rgba(255,255,255,.3);font-size:.8rem;padding:.4rem">Eşleşen kullanıcı yok</div>'; return; }
+  const yLabels = { full:'Editör', limited:'Oyuncu', manager:'Tam Yetki' };
+  el.innerHTML = filtered.map(u => `<div class="lib-item" style="flex-wrap:wrap;gap:.3rem">
+    <div style="flex:1;min-width:0;cursor:pointer" onclick="openUserDetail('${u.sicil.replace(/'/g,"\\'")}')">
+      <div style="font-size:.82rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--tt-cyan)">${escHtml(u.adSoyad)}</div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.4)">${escHtml(u.sicil)} · ${yLabels[u.yetki]||u.yetki} ${u.hasPassword?'🔑':' ⚠️ Şifresiz'}</div>
+      <div style="font-size:.68rem;color:rgba(255,255,255,.35);margin-top:.1rem">Son giriş: ${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('tr-TR') : 'Hiç giriş yapmadı'}</div>
+    </div>
+    <button class="btn btn-sm" style="padding:.28rem .5rem;font-size:.68rem;background:rgba(255,255,255,.1);border:1px solid var(--border);color:#fff;flex-shrink:0" onclick="adminResetPw('${u.sicil}','${escHtml(u.adSoyad)}')">Şifre</button>
+    <button class="btn btn-sm btn-danger" style="padding:.28rem .45rem;font-size:.72rem;flex-shrink:0" onclick="removeUser('${u.sicil}','${escHtml(u.adSoyad)}')">✕</button>
+  </div>`).join('');
+}
+function toggleAddUserForm() {
+  const f = document.getElementById('add-user-form');
+  const bulk = document.getElementById('bulk-import-form');
+  bulk.style.display = 'none';
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function toggleBulkImport() {
+  const f = document.getElementById('bulk-import-form');
+  const add = document.getElementById('add-user-form');
+  add.style.display = 'none';
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+async function handleBulkUserImport(btn) {
+  const fileInput = document.getElementById('bulk-user-file');
+  const file = fileInput.files?.[0];
+  const resultEl = document.getElementById('bulk-import-result');
+  if (!file) { toast('Bir Excel dosyası seçin'); return; }
+  if (typeof XLSX === 'undefined') { toast('Excel kütüphanesi yükleniyor, birazdan tekrar deneyin'); return; }
+
+  const restore = setBtnLoading(btn, '⏳ Okunuyor...');
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    const parsed = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const sicil = String(row[0] || '').trim();
+      if (!sicil || sicil.toLowerCase() === 'sicil') continue; // başlık satırını atla
+      parsed.push({
+        sicil,
+        adSoyad: String(row[1] || '').trim(),
+        password: String(row[2] || '').trim(),
+        yetkiCode: String(row[3] || '').trim(),
+      });
+    }
+    if (!parsed.length) { toast('Excel\'de geçerli satır bulunamadı'); return; }
+
+    btn.innerHTML = `⏳ ${parsed.length} satır ekleniyor...`;
+    const res = await apiCall('/users/bulk-import', 'POST', { rows: parsed });
+    resultEl.innerHTML = `
+      <div style="color:var(--ok)">✅ ${res.added.length} kullanıcı eklendi${res.added.length ? ': ' + res.added.map(escHtml).join(', ') : ''}</div>
+      ${res.skipped.length ? `<div style="color:var(--bad);margin-top:.4rem">⚠️ ${res.skipped.length} satır atlandı:<br>${res.skipped.map(s => `${escHtml(s.sicil)} — ${escHtml(s.reason)}`).join('<br>')}</div>` : ''}
+    `;
+    await renderUsers();
+    fileInput.value = '';
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--bad)">❌ ${escHtml(e.message || 'İçe aktarılamadı')}</div>`;
+  } finally { restore(); }
+}
+
+// ══════════════════════ KULLANICI DETAY PANELİ ══════════════════════
+let currentUserDetailSicil = null;
+async function openUserDetail(sicil) {
+  currentUserDetailSicil = sicil;
+  document.getElementById('modal-user-detail').style.display = 'flex';
+  document.getElementById('ud-title').textContent = 'Yükleniyor...';
+  ['login','sessions','ai'].forEach(t => document.getElementById('ud-panel-'+t).innerHTML = '');
+  switchUserDetailTab('login');
+  try {
+    const d = await apiCall('/users/' + encodeURIComponent(sicil) + '/detail');
+    document.getElementById('ud-title').textContent = `${d.adSoyad} (${d.sicil})`;
+
+    document.getElementById('ud-panel-login').innerHTML = d.logins.length
+      ? `<div style="font-size:.8rem;color:rgba(255,255,255,.5);margin-bottom:.6rem">En yakından en eskiye, son ${d.logins.length} giriş:</div>` +
+        d.logins.map(dt => `<div style="padding:.5rem .3rem;border-bottom:1px solid var(--border);font-size:.85rem">${new Date(dt).toLocaleString('tr-TR')}</div>`).join('')
+      : '<div style="color:rgba(255,255,255,.3);text-align:center;padding:2rem">Hiç giriş kaydı yok</div>';
+
+    document.getElementById('ud-panel-sessions').innerHTML = d.sessions.length
+      ? d.sessions.map(s => `<div style="padding:.7rem;border-bottom:1px solid var(--border)">
+          <div style="font-weight:700;font-size:.85rem">${escHtml(s.title || '(Başlıksız)')} ${s.category ? `<span style="color:rgba(255,255,255,.4);font-weight:400">· ${escHtml(s.category)}</span>` : ''}</div>
+          <div style="font-size:.75rem;color:rgba(255,255,255,.45);margin-top:.2rem">${s.endedAt ? new Date(s.endedAt).toLocaleString('tr-TR') : '-'} · ${s.playerCount ?? 0} katılımcı · ${s.questionCount ?? 0} soru</div>
+          <button class="btn btn-sm btn-primary" style="margin-top:.4rem;padding:.3rem .7rem;font-size:.72rem" onclick="downloadReport(${s.id})">⬇ Rapor</button>
+        </div>`).join('')
+      : '<div style="color:rgba(255,255,255,.3);text-align:center;padding:2rem">Hiç sınav başlatmamış</div>';
+
+    document.getElementById('ud-panel-ai').innerHTML = `
+      <div style="text-align:center;padding:1.5rem">
+        <div style="font-size:2.2rem;font-weight:900;color:var(--tt-cyan)">${d.aiQueryCount}</div>
+        <div style="color:rgba(255,255,255,.5);font-size:.85rem;margin-top:.3rem">toplam AI sorgusu (soru üretimi + analiz sohbeti)</div>
+        <div style="color:rgba(255,255,255,.3);font-size:.72rem;margin-top:1rem">Gizlilik ve veri tabanı boyutu için sadece sayaç tutuluyor — hangi soruları sorduğu ayrıca kaydedilmiyor.</div>
+      </div>`;
+  } catch(e) {
+    document.getElementById('ud-title').textContent = 'Yüklenemedi';
+    toast('Detay alınamadı: ' + e.message);
+  }
+}
+function switchUserDetailTab(tab) {
+  ['login','sessions','ai'].forEach(t => {
+    document.getElementById('ud-panel-'+t).style.display = t === tab ? 'block' : 'none';
+    const btn = document.querySelector(`.ud-tab[data-tab="${t}"]`);
+    if (btn) { btn.style.background = t === tab ? 'rgba(255,255,255,.08)' : 'transparent'; btn.style.color = t === tab ? '#fff' : 'rgba(255,255,255,.5)'; }
+  });
+}
+async function addUser(btn) {
+  const sicil = (document.getElementById('new-sicil').value || '').trim().toUpperCase();
+  const adSoyad = (document.getElementById('new-adsoyad').value || '').trim();
+  const password = (document.getElementById('new-pw').value || '');
+  const yetki = document.getElementById('new-yetki').value || 'limited';
+  if (!sicil || !adSoyad) { toast('Sicil ve ad soyad zorunludur!'); return; }
+  if (!password || password.length < 4) { toast('Şifre en az 4 karakter olmalıdır!'); return; }
+  const restore = setBtnLoading(btn, '⏳ Ekleniyor...');
+  try {
+    await apiCall('/users', 'POST', { sicil, adSoyad, yetki, password });
+    document.getElementById('new-sicil').value = '';
+    document.getElementById('new-adsoyad').value = '';
+    document.getElementById('new-pw').value = '';
+    await renderUsers();
+    toast(`${adSoyad} eklendi ✓`);
+  } catch(e) { toast('Eklenemedi: ' + e.message); }
+  finally { restore(); }
+}
+async function adminResetPw(sicil, name) {
+  const pw = prompt(`"${name}" (${sicil}) için yeni şifre girin (en az 4 karakter):`);
+  if (!pw) return;
+  if (pw.length < 4) { toast('Şifre en az 4 karakter olmalıdır!'); return; }
+  try {
+    await apiCall('/users/' + sicil + '/password', 'PATCH', { password: pw });
+    toast('Şifre güncellendi ✓');
+    await renderUsers();
+  } catch(e) { toast('Güncellenemedi: ' + e.message); }
+}
+async function removeUser(sicil, name) {
+  if (!confirm(`"${name}" (${sicil}) silinsin mi?`)) return;
+  try {
+    await apiCall('/users/' + sicil, 'DELETE');
+    await renderUsers();
+    toast('Kullanıcı silindi');
+  } catch(e) { toast('Silinemedi: ' + e.message); }
+}
+
+function backToPanel() {
+  clearInts(); stopBgMusic(); stopConfetti(); isHost = false; sessionInProgress = false;
+  voicePlayToken++; // panele dönerken bekleyen sesli soru çağrısı varsa geçersiz kılınır
+  const vo = document.getElementById('voice-overlay'); if (vo) vo.style.display = 'none';
+  justCancelledByMe = true;
+  socket.emit('host-cancel', { pin: gamePin });
+  if (currentRole === 'limited') showLimitedPanel();
+  else showAdmin();
+}
+
+function showChangePw() {
+  const m = document.getElementById('modal-changepw');
+  if (!m) return;
+  document.getElementById('cpw-old').value = '';
+  document.getElementById('cpw-new').value = '';
+  document.getElementById('cpw-new2').value = '';
+  const errEl = document.getElementById('cpw-err');
+  if (errEl) errEl.style.display = 'none';
+  m.style.display = 'flex';
+  setTimeout(() => document.getElementById('cpw-old')?.focus(), 100);
+}
+function closeChangePw() {
+  const m = document.getElementById('modal-changepw');
+  if (m) m.style.display = 'none';
+}
+async function doChangePw() {
+  const old = document.getElementById('cpw-old').value;
+  const nw = document.getElementById('cpw-new').value;
+  const nw2 = document.getElementById('cpw-new2').value;
+  const errEl = document.getElementById('cpw-err');
+  const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+  errEl.style.display = 'none';
+  if (!old || !nw || !nw2) { showErr('Tüm alanları doldurun.'); return; }
+  if (nw.length < 4) { showErr('Yeni şifre en az 4 karakter olmalıdır.'); return; }
+  if (nw !== nw2) { showErr('Yeni şifreler eşleşmiyor.'); return; }
+  try {
+    await apiCall('/auth/change-password', 'POST', { oldPassword: old, newPassword: nw });
+    closeChangePw();
+    toast('Şifreniz güncellendi ✓');
+  } catch(e) { showErr(e.message || 'Şifre güncellenemedi.'); }
+}
+
+// ══════════════════════ LIMITED USER PANEL ══════════════════════
+async function showLimitedPanel() {
+  clearInts(); stopConfetti(); stopBgMusic(); isHost = false;
+  const el = document.getElementById('limited-adsoyad');
+  if (el) el.textContent = (currentAdSoyad || currentSicil || '') + ' · Hoş geldiniz!';
+  show('limited');
+  await renderLimitedSets();
+}
+async function renderLimitedSets() {
+  const sel = document.getElementById('limited-sets');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">-- Yükleniyor... --</option>';
+  try {
+    const sets = await apiCall('/question-sets');
+    sel.innerHTML = '<option value="">-- Soru seti seçin --</option>';
+    const groups = {};
+    sets.forEach((s, i) => { const c = s.category || 'Diğer'; (groups[c] = groups[c] || []).push({ ...s, _i: i }); });
+    const orderedCats = [...LIB_CATEGORIES, ...Object.keys(groups).filter(c => !LIB_CATEGORIES.includes(c))];
+    orderedCats.filter(c => groups[c]?.length).forEach(cat => {
+      const og = document.createElement('optgroup');
+      og.label = cat;
+      groups[cat].forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = String(s._i);
+        opt.textContent = `${s.name} (${(s.questions||[]).length} soru)`;
+        opt.dataset.questions = JSON.stringify(s.questions || []);
+        og.appendChild(opt);
+      });
+      sel.appendChild(og);
+    });
+  } catch(e) { sel.innerHTML = '<option value="">Yüklenemedi</option>'; toast('Soru setleri alınamadı: ' + e.message); }
+}
+function startLimitedLobby() {
+  const sel = document.getElementById('limited-sets');
+  const idx = sel.selectedIndex;
+  if (idx <= 0) { toast('Lütfen bir soru seti seçin!'); return; }
+  const opt = sel.options[idx];
+  questions = JSON.parse(opt.dataset.questions || '[]');
+  if (!questions.length) { toast('Bu set boş!'); return; }
+  saveQ();
+  const titleEl = document.getElementById('quiz-title');
+  if (titleEl) titleEl.value = opt.text.replace(/\s*\(\d+ soru\)\s*$/, '').trim() || 'AssisTT Eğitim Quiz';
+  confirmStartLobby();
+}
+
+// ══════════════════════ HOST: LOBBY ══════════════════════
+function openLaunchModal() {
+  if (!questions.length) { toast('En az 1 soru ekleyin!'); return; }
+  document.getElementById('launch-qcount').textContent = `${questions.length} soru ile başlatılacak.`;
+  const badge = document.getElementById('fb-badge');
+  if (badge) badge.style.display = (fbEnabled && fbRules.length) ? '' : 'none';
+  const catSel = document.getElementById('launch-category');
+  if (catSel) {
+    catSel.innerHTML = LIB_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+    catSel.value = lastLoadedCategory || LIB_CATEGORIES[0];
+  }
+  document.getElementById('modal-launch').style.display = 'flex';
+  setTimeout(() => document.getElementById('quiz-title')?.focus(), 100);
+}
+function closeLaunchModal() { document.getElementById('modal-launch').style.display = 'none'; }
+
+function confirmStartLobby() {
+  if (!questions.length) { toast('En az 1 soru ekleyin!'); return; }
+  isHost = true; players = []; curQIdx = 0;
+  // Burada sadece bir öneri PIN'i — sunucu bunu zaten aktif bir oturumla
+  // çakışırsa değiştirebilir. Ekranı/QR kodunu gerçek kurulan PIN'i
+  // onaylayan 'session-created' cevabı geldiğinde kuruyoruz (aşağıda).
+  const suggestedPin = String(Math.floor(100000 + Math.random() * 900000));
+
+  const title = (document.getElementById('quiz-title')?.value || 'AssisTT Eğitim Quiz').trim();
+  const category = document.getElementById('launch-category')?.value || '';
+  const payload = { pin: suggestedPin, questions, title, category, hostSicil: currentSicil };
+  if (fbEnabled && fbRules.length) payload.feedbackRules = fbRules;
+  socket.emit('create-session', payload);
+  sessionInProgress = true;
+  closeLaunchModal();
+  setBgMusic('lobby');
+}
+
+socket.on('session-created', data => {
+  gamePin = data.pin;
+  saveActiveSession(gamePin, '', true);
+  show('host');
+  document.getElementById('game-pin').textContent = gamePin;
+  document.getElementById('player-count').textContent = '0';
+  document.getElementById('player-chips').innerHTML = '<div style="color:rgba(255,255,255,.3);font-size:.9rem">Bağlantı bekleniyor...</div>';
+  document.getElementById('qr-container').innerHTML = '';
+
+  const joinUrl = `${location.protocol}//${location.host}${location.pathname}?join=${gamePin}`;
+  try { new QRCode(document.getElementById('qr-container'), { text: joinUrl, width: 150, height: 150, colorDark: '#002C5F', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M }); } catch(e){}
+
+  const infoBox = document.getElementById('host-info-box');
+  if (infoBox) infoBox.style.display = localStorage.getItem('hide_host_info_' + currentSicil) ? 'none' : 'block';
+});
+// "Bunu bir daha gösterme" — sadece bu host için, sicile bağlı olarak
+// kalıcı — başka bir host kendi oturumlarında bu kutuyu yine görür.
+function dismissHostInfoBox() {
+  localStorage.setItem('hide_host_info_' + currentSicil, '1');
+  const infoBox = document.getElementById('host-info-box');
+  if (infoBox) infoBox.style.display = 'none';
+  toast('Bu bilgilendirme bir daha gösterilmeyecek');
+}
+
+socket.on('player-joined', data => {
+  players = data.players || [];
+  document.getElementById('player-count').textContent = data.playerCount;
+  renderPlayerChips();
+});
+socket.on('player-left', data => {
+  players = data.players || [];
+  document.getElementById('player-count').textContent = data.playerCount;
+  renderPlayerChips();
+});
+
+function renderPlayerChips() {
+  const c = document.getElementById('player-chips');
+  if (!players.length) { c.innerHTML='<div style="color:rgba(255,255,255,.3);font-size:.9rem">Bağlantı bekleniyor...</div>';return; }
+  c.innerHTML = players.map(p => {
+    const url = `https://api.dicebear.com/7.x/${(p.avatar||{}).style||'adventurer'}/svg?seed=${encodeURIComponent((p.avatar||{}).seed||p.name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+    return `<div class="pchip"><div class="chip-av"><img src="${url}" width="36" height="36"></div>${escHtml(p.name)}</div>`;
+  }).join('');
+}
+function escHtml(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+
+// ══════════════════════ HOST: START GAME ══════════════════════
+function startGame() { socket.emit('start-game', { pin: gamePin }); }
+
+// Host ya da oyuncu olsun, yeni bir soru geldiğinde direkt ekrana basmadan
+// önce ortalanmış, büyük bir "3, 2, 1" geri sayımı gösterir. Bu hem host'ta
+// hem oyuncularda ayrı ayrı, aynı 'game-started'/'question-shown' broadcast'i
+// aldıkları anda tetiklendiği için pratikte eşzamanlı çalışır — sunucu
+// tarafında ekstra bir gecikme/adım eklemeye gerek kalmadan.
+function revealQuestionWithCountdown(qIdx, q) {
+  const overlay = document.getElementById('countdown-overlay');
+  const numEl = document.getElementById('countdown-num');
+  // Önceki sorudan kalmış olabilecek sesli-soru overlay'ini (nadir bir
+  // zamanlama durumunda) garanti olarak kapat, yeni soru ekranı temiz başlasın.
+  const voiceOverlay = document.getElementById('voice-overlay');
+  if (voiceOverlay) voiceOverlay.style.display = 'none';
+  voicePendingQIdx = null; voicePendingQ = null;
+  voicePlayToken++; // ek güvenlik: önceki soruya ait gecikmeli bir çağrı varsa geçersiz kılınır
+
+  if (!overlay || !numEl) { // overlay yoksa (beklenmedik durum) direkt göster
+    if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+    return;
+  }
+  overlay.style.display = 'flex';
+  let n = 3;
+  const tick = () => {
+    if (n === 0) {
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q);
+        else if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+      }, 300);
+      return;
+    }
+    numEl.textContent = n;
+    numEl.classList.remove('pop'); void numEl.offsetWidth; numEl.classList.add('pop');
+    sfxCountdown();
+    n--;
+    setTimeout(tick, 700);
+  };
+  tick();
+}
+
+// ══════════════════════ SESLİ SORU OYNATMA (host + oyuncu) ══════════════════════
+// Akış: 3-2-1 bitince -> 🔊 ikonu ~1sn -> (otomatikse hemen, değilse host'un
+// "Sesi Başlat" tıklamasını bekleyip) ses çalar -> ses biterse (ya da 60sn
+// güvenlik zaman aşımı dolarsa) normal soru+şıklar+süre gösterimine geçilir.
+let voicePendingQIdx = null, voicePendingQ = null;
+function revealVoiceQuestion(qIdx, q) {
+  voicePendingQIdx = qIdx; voicePendingQ = q;
+  const overlay = document.getElementById('voice-overlay');
+  const statusEl = document.getElementById('voice-overlay-status');
+  const triggerBtn = document.getElementById('voice-overlay-trigger-btn');
+  overlay.style.display = 'flex';
+  statusEl.textContent = 'Sesli soru...';
+  triggerBtn.style.display = 'none';
+
+  setTimeout(() => {
+    if (q.audioAutoplay) {
+      statusEl.textContent = 'Dinleyin...';
+      playVoiceQuestionAudio(qIdx, q);
+    } else if (isHost) {
+      statusEl.textContent = 'Katılımcılara sesi başlatmak için hazır olduğunuzda tıklayın.';
+      triggerBtn.style.display = 'inline-block';
+    } else {
+      statusEl.textContent = 'Sunum yapan kişinin sesi başlatması bekleniyor...';
+    }
+  }, 1000);
+}
+function hostTriggerVoicePlay() {
+  document.getElementById('voice-overlay-trigger-btn').style.display = 'none';
+  document.getElementById('voice-overlay-status').textContent = 'Dinleyin...';
+  socket.emit('trigger-voice-play', { pin: gamePin });
+}
+socket.on('voice-playback-triggered', () => {
+  if (voicePendingQIdx === null) return;
+  playVoiceQuestionAudio(voicePendingQIdx, voicePendingQ);
+});
+// Her sesli soru oynatımına artan bir "token" veriyoruz. Bir önceki
+// oynatmadan kalma herhangi bir gecikmeli/geride kalmış çağrı (örn. bir
+// hata payı için varsa da) artık geçerli olmayan bir token taşıyorsa
+// hiçbir şey yapmadan çıkar — ekranı asla ele geçiremez.
+let voicePlayToken = 0;
+function playVoiceQuestionAudio(qIdx, q) {
+  const player = document.getElementById('voiceq-player');
+  const myToken = ++voicePlayToken;
+  let finished = false;
+  let safetyTimeout;
+  const finish = () => {
+    if (finished || myToken !== voicePlayToken) return;
+    finished = true;
+    // KÖK NEDEN DÜZELTMESİ: Ses normal şekilde bitip buraya girildiğinde bile
+    // bekleyen 60sn'lik güvenlik zaman aşımını MUTLAKA iptal ediyoruz.
+    // Önceden bu satır eksikti — bu yüzden ses normal bitse bile, tam 60
+    // saniye sonra bu FONKSİYON TEKRAR çalışıp o anki ekranın (yeni soru,
+    // leaderboard, hatta yeni kurulan bir sınavın) üzerine eski soruyu
+    // bindiriyordu. Raporladığın "host'un katılımcı gibi görünmesi",
+    // "eski soruya dönme", "sınav bitince eski soru çıkması" bug'larının
+    // hepsinin kök nedeni buydu.
+    clearTimeout(safetyTimeout);
+    player.onended = null;
+    player.onerror = null;
+    document.getElementById('voice-overlay').style.display = 'none';
+    voicePendingQIdx = null; voicePendingQ = null;
+    if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+  };
+  if (!q.audioData) { finish(); return; } // ses verisi yoksa (beklenmedik) soruya geç, sınav kilitli kalmasın
+  player.src = q.audioData;
+  player.onended = finish;
+  // Ses bir sebeple hiç yüklenmez/çalmazsa (bozuk veri, tarayıcı engeli vb.)
+  // sınav sonsuza dek "sesli soru" ekranında takılı kalmasın diye güvenlik
+  // zaman aşımı — makul en uzun senaryo metni için fazlasıyla yeterli süre.
+  safetyTimeout = setTimeout(finish, 60000);
+  player.onerror = finish;
+  player.play().catch(finish);
+}
+
+socket.on('game-started', data => {
+  curQIdx = data.qIdx; totalQuestions = data.total; curQuestion = data.question;
+  if (data.title) currentQuizTitle = data.title;
+  revealQuestionWithCountdown(curQIdx, curQuestion);
+});
+socket.on('question-shown', data => {
+  curQIdx = data.qIdx; totalQuestions = data.total; curQuestion = data.question;
+  revealQuestionWithCountdown(curQIdx, curQuestion);
+});
+
+// ══════════════════════ HOST: QUESTION SCREEN ══════════════════════
+function showHostQuestion(qi) {
+  stopConfetti(); revealed = false;
+  const q = questions[qi];
+  timerLeft = q.time || 20;
+
+  show('qhost'); setBgMusic('question'); _radioDuck(true);
+  const hpb = document.getElementById('host-pin-badge');
+  if (hpb) hpb.textContent = gamePin;
+  document.getElementById('qnum').textContent = qi + 1;
+  document.getElementById('qtotal').textContent = totalQuestions || questions.length;
+  document.getElementById('qtxt').textContent = q.text;
+  document.getElementById('qbar').style.width = '100%';
+  document.getElementById('timer-h').textContent = timerLeft;
+  document.getElementById('timer-h').classList.remove('urgent');
+  document.getElementById('reveal-btn').style.display = '';
+  document.getElementById('next-btn').style.display = 'none';
+  document.getElementById('all-banner').style.display = 'none';
+  document.getElementById('ans-cnt').textContent = '0';
+  document.getElementById('tot-pl').textContent = players.length;
+  document.getElementById('pts-lbl').textContent = q.pts === 'double' ? '⚡ Çift Puan' : q.pts === 'none' ? '🎯 Puansız' : '⭐ Standart';
+
+  const shapes = ['▲','●','■','♦'], cls = ['aa','ab','ac','ad'];
+  lastAnswerCounts = {};
+  document.getElementById('qans-host').innerHTML = q.answers.map((a,i)=> {
+    if (!String(a.text ?? '').trim()) return '';
+    return `<div class="abtn ${cls[i]}" id="ha-${i}"><div class="ashape">${shapes[i]}</div><span style="flex:1;text-align:left">${escHtml(normAnswerText(String(a.text)))}</span><div class="hbar" id="hbar-${i}" style="width:0"></div></div>`;
+  }).join('');
+
+  clearInts();
+  timerInt = setInterval(() => {
+    timerLeft--;
+    const te = document.getElementById('timer-h');
+    if (te) { te.textContent = Math.max(0,timerLeft); if (timerLeft<=5) te.classList.add('urgent'); else te.classList.remove('urgent'); }
+    const qb = document.getElementById('qbar');
+    if (qb) qb.style.width = Math.max(0, timerLeft / q.time * 100) + '%';
+    if (timerLeft<=5 && timerLeft>0) sfxCountdown();
+    if (timerLeft <= 0) { clearInterval(timerInt); revealAnswer(); }
+  }, 1000);
+}
+
+let lastAnswerCounts = {};
+socket.on('player-answered', data => {
+  document.getElementById('ans-cnt').textContent = data.answeredCount;
+  document.getElementById('tot-pl').textContent = data.totalPlayers;
+  lastAnswerCounts = { counts: data.answerCounts || {}, total: data.totalPlayers };
+  // Bars hidden during question — only show after reveal to prevent cheating
+});
+socket.on('all-answered', () => {
+  document.getElementById('all-banner').style.display = 'block';
+  setTimeout(() => revealAnswer(), 1500);
+});
+
+// ══════════════════════ HOST: REVEAL ══════════════════════
+function revealAnswer() {
+  clearInts(); if (revealed) return; revealed = true;
+  sfxReveal(); stopBgMusic();
+  socket.emit('reveal-answer', { pin: gamePin, qIdx: curQIdx });
+}
+
+socket.on('answer-revealed', data => {
+  const { correctIndexes, playerScores, qIdx } = data;
+  const q = questions[qIdx];
+
+  if (isHost && q) {
+    const total = lastAnswerCounts.total || 1;
+    const counts = lastAnswerCounts.counts || {};
+    q.answers.forEach((a, i) => {
+      const el = document.getElementById('ha-' + i);
+      if (el) el.classList.add('revealed', correctIndexes.includes(i) ? 'correct' : 'wrong');
+      // Now safe to show bars — question is over
+      const bar = document.getElementById('hbar-' + i);
+      if (bar) bar.style.width = total ? Math.round((counts[i]||0) / total * 80 + 5) + '%' : '0';
+    });
+    document.getElementById('reveal-btn').style.display = 'none';
+    document.getElementById('next-btn').style.display = 'block';
+    document.getElementById('next-btn').textContent = qIdx + 1 < questions.length ? 'Devam Et →' : '🏆 Liderlik Tablosu';
+    document.getElementById('all-banner').style.display = 'none';
+  }
+
+  if (!isHost) showPlayerReveal(qIdx, correctIndexes, playerScores);
+});
+
+// ══════════════════════ HOST: NEXT / LEADERBOARD ══════════════════════
+function goNextOrLB() { socket.emit('show-leaderboard', { pin: gamePin }); }
+function continueGame() { socket.emit('next-question', { pin: gamePin }); }
+function endGameNow()   { socket.emit('end-game', { pin: gamePin }); }
+
+socket.on('leaderboard-shown', data => {
+  stopBgMusic(); _radioDuck(false); renderLB(data.leaderboard, isHost, data.isLast);
+});
+function renderLB(lb, hostView, isLast) {
+  show('lb');
+  const rankCls = ['lb1','lb2','lb3'];
+  document.getElementById('lb-list').innerHTML = (lb||[]).slice(0,5).map((p,i) => {
+    const url = `https://api.dicebear.com/7.x/${(p.avatar||{}).style||'adventurer'}/svg?seed=${encodeURIComponent((p.avatar||{}).seed||p.name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+    return `<div class="lbrow ${rankCls[i]||'lbx'}" style="animation-delay:${i*.07}s">
+      <div class="lbrank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
+      <img src="${url}" width="44" height="44" style="border-radius:50%;flex-shrink:0">
+      <div class="lbname">${escHtml(p.name)}</div>
+      <div class="lbscore">${p.score} <span style="font-size:.8rem;color:rgba(255,255,255,.5);font-weight:500">puan</span></div>
+    </div>`;
+  }).join('') || '<div style="text-align:center;color:rgba(255,255,255,.3);padding:2rem">Katılımcı yok</div>';
+
+  const acts = document.getElementById('lb-actions');
+  if (hostView) {
+    acts.innerHTML = isLast
+      ? `<button class="btn btn-primary" onclick="endGameNow()" style="padding:1rem 3rem">🏁 Oyunu Bitir</button>`
+      : `<button class="btn btn-primary" onclick="continueGame()" style="padding:1rem 2.5rem">Devam Et →</button><button class="btn btn-outline" onclick="endGameNow()">Sonlandır</button>`;
+  } else {
+    acts.innerHTML = '<div style="color:var(--tt-cyan);font-weight:600">Yönetici devam etmesi bekleniyor...</div>';
+  }
+  sfxFanfare(); setTimeout(() => startHostConfetti(), 300); setBgMusic('lobby');
+}
+
+socket.on('game-ended', data => { clearActiveSession(); sessionInProgress = false; showEnd(data.leaderboard); });
+socket.on('feedback-shown', data => { myEndFeedback = data.items || []; renderEndFeedback(); });
+socket.on('personal-result', data => { myPersonalResult = data; renderEndPersonal(); });
+// Sınav bitince sunucudan kişiye özel gelen sıra + doğru/yanlış/boş sayısı.
+// feedback ile aynı sebepten (broadcast 'game-ended' ile kişiye özel event
+// arasında sıralama garantisi yok) ayrı bir değişkende tutup ikisi de
+// birbirini bekleyebiliyor.
+let myPersonalResult = null;
+function renderEndPersonal() {
+  const el = document.getElementById('end-personal');
+  if (!el) return;
+  if (!myPersonalResult) { el.innerHTML = ''; return; }
+  const r = myPersonalResult;
+  const isTop3 = r.rank && r.rank <= 3;
+  el.innerHTML = `<div style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:12px;padding:1rem;text-align:center">
+    <div style="font-size:1.3rem;font-weight:800;color:var(--tt-cyan)">${r.rank ? `${r.rank}. sıradasın` : 'Sıralama yok'}${r.totalPlayers ? ` <span style="color:rgba(255,255,255,.4);font-weight:400;font-size:.95rem">/ ${r.totalPlayers} kişi</span>` : ''}</div>
+    <div style="display:flex;justify-content:center;gap:1.4rem;margin-top:.6rem;font-size:.95rem">
+      <span style="color:var(--ok)">✅ ${r.correct} doğru</span>
+      <span style="color:var(--bad)">❌ ${r.wrong} yanlış</span>
+      <span style="color:rgba(255,255,255,.5)">➖ ${r.blank} boş</span>
+    </div>
+    ${isTop3 ? `<button class="btn btn-primary" style="margin-top:.9rem" onclick="downloadCertificate()">🏆 Sertifikanı İndir</button>` : ''}
+  </div>`;
+}
+
+// İlk 3'e giren bir katılımcı için, sınav bilgileri + isim + sıra + kendi
+// avatarıyla kişiselleştirilmiş bir başarı sertifikası üretir (Canvas ile,
+// tamamen istemci tarafında — sunucuya ekstra yük bindirmiyor) ve PNG olarak
+// indirir. Sadece o katılımcının kendi ekranında görünür/indirilebilir.
+async function downloadCertificate() {
+  if (!myPersonalResult || !myPersonalResult.rank || myPersonalResult.rank > 3) return;
+  const rank = myPersonalResult.rank;
+  const medalEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+  const rankWord = rank === 1 ? 'Birinci' : rank === 2 ? 'İkinci' : 'Üçüncü';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200; canvas.height = 850;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, 1200, 850);
+  grad.addColorStop(0, '#001428'); grad.addColorStop(1, '#002C5F');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, 1200, 850);
+
+  ctx.strokeStyle = '#00B5E2'; ctx.lineWidth = 6; ctx.strokeRect(30, 30, 1140, 790);
+  ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 1; ctx.strokeRect(45, 45, 1110, 760);
+
+  const loadImg = (src) => new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+  const [logoImg, avatarImg] = await Promise.all([
+    loadImg('https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/AssisTT_logo.svg/960px-AssisTT_logo.svg.png'),
+    loadImg(`https://api.dicebear.com/7.x/${myAvatar.style}/png?seed=${encodeURIComponent(myAvatar.seed)}&size=240`),
+  ]);
+
+  if (logoImg) {
+    const logoW = 170, logoH = logoW * (logoImg.height / logoImg.width);
+    try { ctx.drawImage(logoImg, 600 - logoW / 2, 68, logoW, logoH); } catch(e) {}
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.font = "900 40px Montserrat, sans-serif";
+  ctx.fillText('BAŞARI SERTİFİKASI', 600, 215);
+
+  ctx.font = "700 88px sans-serif";
+  ctx.fillText(medalEmoji, 600, 325);
+
+  ctx.font = "800 46px Montserrat, sans-serif";
+  ctx.fillStyle = '#00B5E2';
+  ctx.fillText(`${rankWord} Oldunuz!`, 600, 400);
+
+  ctx.font = "700 36px Montserrat, sans-serif";
+  ctx.fillStyle = '#fff';
+  ctx.fillText(myName, 600, 465);
+
+  ctx.font = "400 23px Montserrat, sans-serif";
+  ctx.fillStyle = 'rgba(255,255,255,.8)';
+  const title = currentQuizTitle || 'AssisTT Eğitim Quiz';
+  wrapCertText(ctx, `"${title}" sınavından ${rankWord.toLowerCase()} oldunuz.`, 600, 515, 900, 30);
+
+  ctx.font = "400 18px Montserrat, sans-serif";
+  ctx.fillStyle = 'rgba(255,255,255,.5)';
+  const dateStr = new Date().toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric' });
+  ctx.fillText(dateStr, 600, 585);
+
+  if (avatarImg) {
+    try {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(1050, 730, 70, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+      ctx.drawImage(avatarImg, 980, 660, 140, 140);
+      ctx.restore();
+      ctx.strokeStyle = '#00B5E2'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(1050, 730, 70, 0, Math.PI * 2); ctx.stroke();
+    } catch(e) {}
+  }
+
+  ctx.textAlign = 'left';
+  ctx.font = "700 16px Montserrat, sans-serif";
+  ctx.fillStyle = 'rgba(255,255,255,.4)';
+  ctx.fillText('AssisTT Quiz Time', 90, 785);
+
+  canvas.toBlob((blob) => {
+    if (!blob) { toast('❌ Sertifika oluşturulamadı'); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sertifika-${myName.replace(/\s+/g, '_')}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, 'image/png');
+}
+function wrapCertText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '', lines = [];
+  words.forEach(w => {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = w; }
+    else line = test;
+  });
+  if (line) lines.push(line);
+  const startY = y - ((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((l, i) => ctx.fillText(l, x, startY + i * lineHeight));
+}
+
+function showEnd(lb) {
+  stopBgMusic(); show('end');
+  const rankCls = ['lb1','lb2','lb3'];
+  document.getElementById('end-lb').innerHTML = (lb||[]).slice(0,3).map((p,i) => {
+    const url = `https://api.dicebear.com/7.x/${(p.avatar||{}).style||'adventurer'}/svg?seed=${encodeURIComponent((p.avatar||{}).seed||p.name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+    return `<div class="lbrow ${rankCls[i]||'lbx'}">
+      <div class="lbrank" style="font-size:${i===0?'2rem':'1.4rem'}">${i===0?'🥇':i===1?'🥈':'🥉'}</div>
+      <img src="${url}" width="52" height="52" style="border-radius:50%;flex-shrink:0">
+      <div class="lbname" style="font-size:1.2rem">${escHtml(p.name)}</div>
+      <div class="lbscore" style="font-size:1.4rem">${p.score}</div>
+    </div>`;
+  }).join('');
+  sfxFanfare(); setTimeout(() => startHostConfetti(), 300);
+  renderEndPersonal();
+  renderEndFeedback();
+}
+
+// Host bu sınav için "Geribildirim Oluştur" özelliğini açtıysa, oyuncu
+// kendi yanlış cevapladığı sorulara karşılık gelen mesajları sunucudan
+// 'feedback-shown' ile alır. Bu event, bitiş ekranından önce ya da sonra
+// gelebileceği için (broadcast 'game-ended' ile kişiye özel event aynı anda
+// yollanıyor ama sıralama garanti değil) ikisi de birbirini bekleyebilsin
+// diye ayrı bir değişkende tutup ekran açıldığında/veri geldiğinde render ediyoruz.
+let myEndFeedback = null;
+function renderEndFeedback() {
+  const el = document.getElementById('end-feedback');
+  if (!el) return;
+  if (!myEndFeedback || !myEndFeedback.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="font-weight:700;color:var(--tt-cyan);font-size:.95rem;margin-top:.4rem">📋 Size özel geribildirim</div>` +
+    myEndFeedback.map(item => `
+      <div style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:.8rem;text-align:left">
+        <div style="white-space:pre-wrap;line-height:1.4">${escHtml(item.message || '')}</div>
+        ${item.imageUrl ? renderFeedbackMedia(item.imageUrl) : ''}
+      </div>
+    `).join('');
+}
+function renderFeedbackMedia(url) {
+  const safe = escHtml(url);
+  if (/\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)) {
+    return `<img src="${safe}" style="max-width:100%;border-radius:8px;margin-top:.5rem;display:block">`;
+  }
+  return `<a href="${safe}" target="_blank" rel="noopener" style="color:var(--tt-cyan);display:inline-block;margin-top:.5rem;word-break:break-all">${safe}</a>`;
+}
+
+// ══════════════════════ PLAYER: JOIN ══════════════════════
+function joinGame() {
+  const pin = document.getElementById('join-pin').value.trim();
+  const name = document.getElementById('join-name').value.trim();
+  const err = document.getElementById('join-err');
+  err.style.display = 'none';
+
+  if (pin.length !== 6) { err.textContent='Lütfen 6 haneli kod girin.'; err.style.display='block'; return; }
+  if (!name) { err.textContent='Lütfen adınızı girin.'; err.style.display='block'; return; }
+
+  myName = name; myPin = pin; myScore = 0; myLastChoice = -1;
+
+  socket.emit('join-session', { pin, name, avatar: myAvatar });
+}
+
+// Persistent listeners (not .once) so the silent auto-rejoin on page load —
+// which doesn't go through joinGame() — also gets handled correctly.
+socket.on('join-success', () => {
+  const err = document.getElementById('join-err');
+  if (err) err.style.display = 'none';
+
+  if (isReconnectJoin) {
+    // Avatar zaten daha önce seçilip kaydedilmişti — tekrar seçtirmeye
+    // gerek yok, direkt bekleme ekranına dön.
+    isReconnectJoin = false;
+    saveActiveSession(myPin, myName, false, myAvatar);
+    document.getElementById('w-av-svg').innerHTML = buildAvatarSVG(myAvatar);
+    document.getElementById('w-name').textContent = myName;
+    document.getElementById('w-pin').textContent = myPin;
+    show('waiting');
+    setBgMusic('lobby');
+    return;
+  }
+
+  saveActiveSession(myPin, myName, false);
+  myEndFeedback = null;
+  myPersonalResult = null;
+  show('avatar'); genAvGrid();
+});
+socket.on('join-error', data => {
+  clearActiveSession();
+  isReconnectJoin = false;
+  const err = document.getElementById('join-err');
+  if (err) { err.textContent = data.message || 'Bağlanamadı.'; err.style.display = 'block'; }
+  show('join');
+});
+
+function confirmAvatar() {
+  socket.emit('update-avatar', { pin: myPin, name: myName, avatar: myAvatar });
+  saveActiveSession(myPin, myName, false, myAvatar);
+  document.getElementById('w-av-svg').innerHTML = buildAvatarSVG(myAvatar);
+  document.getElementById('w-name').textContent = myName;
+  document.getElementById('w-pin').textContent = myPin;
+  show('waiting');
+  setBgMusic('lobby');
+}
+
+// ══════════════════════ PLAYER: QUESTION ══════════════════════
+function showPlayerQuestion(qi, q, initialTimeLeft) {
+  stopConfetti(); if (!q) return;
+  myLastChoice = -1;
+  const t = q.time || 20;
+  // KÖK NEDEN DÜZELTMESİ: Rejoin (F5/bağlantı kopması) sonrası, önceden bu
+  // fonksiyon HER ZAMAN tam süreden (t) başlıyordu; rejoin kodu ekrandaki
+  // yazıyı bir kerelik doğru kalan süreye çekmeye çalışsa da, 1 saniye sonra
+  // aşağıdaki setInterval kendi (yanlış, tam süreden başlayan) `tl`
+  // değişkeninden devam edip ekranı geri sıçratıyordu — yani sayaç
+  // GERÇEKTE hâlâ tam süreden geriye sayıyordu. Bu, geç katılan/yeniden
+  // bağlanan bir katılımcının herkesten çok daha uzun süre "cevap
+  // bekleyen" bir ekranda kalmasına (host çoktan sonraki soruya geçmiş
+  // olsa bile) yol açıyordu. Artık gerçek başlangıç değeri `tl`'nin
+  // kendisine veriliyor, sadece ekran yazısına değil.
+  let tl = (typeof initialTimeLeft === 'number') ? Math.max(0, initialTimeLeft) : t;
+
+  setBgMusic('question'); show('qplayer'); _radioDuck(true);
+  document.getElementById('pqnum').textContent = qi + 1;
+  document.getElementById('pqtxt').textContent = q.text || '(Soru metni yüklenemedi — lütfen sayfayı yenileyin)';
+  document.getElementById('pqbar').style.width = Math.max(0, tl/t*100) + '%';
+  document.getElementById('timer-p').textContent = tl;
+  document.getElementById('timer-p').classList.remove('urgent');
+  document.getElementById('pfeedback').innerHTML = '';
+
+  const shapes = ['▲','●','■','♦'], cls = ['aa','ab','ac','ad'];
+  document.getElementById('paans').innerHTML = (q.answers||[]).map((a,i) => {
+    if (!String(a.text ?? '').trim()) return '';
+    return `<button class="pabtn ${cls[i]}" id="pb-${i}" onclick="submitAns(${i},${qi})"><span class="sym">${shapes[i]}</span>${escHtml(normAnswerText(String(a.text)))}</button>`;
+  }).join('');
+
+  clearInts();
+  // Süre zaten (rejoin ile) bitmiş halde geldiyse direkt "süre doldu"
+  // durumuna geç, sayacı hiç başlatma.
+  if (tl <= 0) {
+    for (let i = 0; i < 4; i++) {
+      const pb = document.getElementById('pb-' + i);
+      if (pb) { pb.disabled = true; pb.style.opacity = '0.4'; }
+    }
+    if (myLastChoice === -1) {
+      document.getElementById('pfeedback').innerHTML = '<div style="color:#e74c3c;font-weight:700">⏰ Süre doldu!</div>';
+    }
+    return;
+  }
+  timerInt = setInterval(() => {
+    tl--;
+    const te = document.getElementById('timer-p');
+    if (te) { te.textContent = Math.max(0,tl); if(tl<=5)te.classList.add('urgent'); }
+    const b = document.getElementById('pqbar');
+    if (b) b.style.width = Math.max(0, tl/t*100) + '%';
+    if (tl<=5 && tl>0) sfxCountdown();
+    if (tl <= 0) {
+      clearInterval(timerInt);
+      // Disable all answer buttons — no more answers accepted
+      for (let i = 0; i < 4; i++) {
+        const pb = document.getElementById('pb-' + i);
+        if (pb) { pb.disabled = true; pb.style.opacity = '0.4'; }
+      }
+      if (myLastChoice === -1) {
+        document.getElementById('pfeedback').innerHTML = '<div style="color:#e74c3c;font-weight:700">⏰ Süre doldu!</div>';
+      }
+    }
+  }, 1000);
+}
+
+function submitAns(ai, qi) {
+  if (myLastChoice !== -1) return; // already answered
+  sfxSelect();
+  myLastChoice = ai;
+  socket.emit('submit-answer', { pin: myPin, name: myName, qIdx: qi, choice: ai });
+
+  // Dim all, highlight selected
+  for (let i = 0; i < 4; i++) {
+    const b = document.getElementById('pb-' + i);
+    if (!b) continue;
+    b.disabled = true;
+    b.style.opacity = i === ai ? '1' : '0.35';
+    if (i === ai) b.classList.add('selected');
+  }
+  document.getElementById('pfeedback').innerHTML = '<div style="color:var(--tt-cyan);font-weight:700;font-size:1.1rem">✓ Yanıtınız alındı</div>';
+}
+
+socket.on('answer-recorded', () => {});
+
+// Oyun devam ederken düşen oyuncunun yeniden bağlanması (F5 dahil).
+// Sunucu artık aktif sorunun/timer'ın/skorun tamamını gönderiyor, bu yüzden
+// burada yerel `curQuestion`'a güvenmemize gerek yok — F5 sonrası boş olurdu.
+socket.on('rejoin-player-success', data => {
+  saveActiveSession(data.pin, myName, false, myAvatar);
+  myPin = data.pin; myScore = data.score || 0;
+  toast(data.isLateJoin ? '✅ Sınava katıldınız, iyi şanslar!' : '✅ Oyuna yeniden katıldınız!');
+
+  if (data.question) { curQuestion = data.question; curQIdx = data.qIdx; totalQuestions = data.total; }
+  myLastChoice = (typeof data.selected === 'number') ? data.selected : -1;
+
+  if (data.phase === 'question' && curQuestion) {
+    // Kalan süre artık showPlayerQuestion'a gerçek başlangıç değeri olarak
+    // veriliyor — sayaç, host'un/diğer katılımcıların gördüğü gerçek süreyle
+    // eşleşerek geriye sayıyor (önceden burada sadece ekran yazısı bir
+    // kerelik değiştirilip 1sn sonra yanlış değerle eziliyordu).
+    showPlayerQuestion(data.qIdx, curQuestion, typeof data.timeLeft === 'number' ? data.timeLeft : undefined);
+    // Already answered before disconnecting — reflect that instead of allowing a second answer
+    if (myLastChoice >= 0) {
+      for (let i = 0; i < 4; i++) {
+        const b = document.getElementById('pb-' + i);
+        if (!b) continue;
+        b.disabled = true;
+        b.style.opacity = i === myLastChoice ? '1' : '0.35';
+        if (i === myLastChoice) b.classList.add('selected');
+      }
+      document.getElementById('pfeedback').innerHTML = '<div style="color:var(--tt-cyan);font-weight:700;font-size:1.1rem">✓ Yanıtınız alındı</div>';
+    }
+  } else if (data.phase === 'reveal' && curQuestion) {
+    show('qplayer');
+    const correctIndexes = data.correctIndexes || [];
+    const shapes = ['▲','●','■','♦'], cls = ['aa','ab','ac','ad'];
+    document.getElementById('paans').innerHTML = (curQuestion.answers || []).map((a,i) => {
+      if (!String(a.text ?? '').trim()) return '';
+      const isRight = correctIndexes.includes(i);
+      return `<button class="pabtn ${cls[i]}" disabled style="opacity:${isRight?1:0.2};${isRight?'box-shadow:0 0 0 2.5px #27ae60;':''}">
+        <span class="sym">${shapes[i]}</span>${escHtml(normAnswerText(String(a.text)))}
+      </button>`;
+    }).join('');
+    const answered = myLastChoice >= 0;
+    const isCorrect = answered && correctIndexes.includes(myLastChoice);
+    document.getElementById('pfeedback').innerHTML = !answered
+      ? '<div style="color:rgba(255,255,255,.5)">Bu soruyu yanıtlamamışsınız.</div>'
+      : `<div style="font-weight:700;color:${isCorrect?'var(--ok)':'var(--bad)'}">${isCorrect?'✓ Doğru cevaplamıştınız':'✗ Yanlış cevaplamıştınız'} · Toplam Puan: ${myScore}</div>`;
+  } else if (data.phase === 'end' && data.leaderboard) {
+    showEnd(data.leaderboard);
+  } else if (data.phase === 'leaderboard' && data.leaderboard) {
+    renderLB(data.leaderboard, false, data.qIdx >= (data.total - 1));
+  } else {
+    show('waiting');
+  }
+});
+
+function showPlayerReveal(qi, correctIndexes, playerScores) {
+  clearInts(); stopBgMusic(); _radioDuck(false);
+  myScore = (playerScores && playerScores[myName]) || myScore;
+  const isCorrect = myLastChoice >= 0 && correctIndexes.includes(myLastChoice);
+  const answered   = myLastChoice >= 0;
+
+  // Re-render answers with correct/wrong coloring
+  const q = curQuestion;
+  const shapes = ['▲','●','■','♦'], cls = ['aa','ab','ac','ad'];
+  document.getElementById('paans').innerHTML = (q && q.answers ? q.answers : []).map((a,i) => {
+    if (!String(a.text ?? '').trim()) return '';
+    const isRight = correctIndexes.includes(i);
+    const opacity = isRight ? 1 : 0.2;
+    return `<button class="pabtn ${cls[i]}" disabled style="opacity:${opacity};${isRight?'box-shadow:0 0 0 2.5px #27ae60;':''}">
+      <span class="sym">${shapes[i]}</span>${escHtml(normAnswerText(String(a.text)))}
+    </button>`;
+  }).join('');
+
+  if (!answered) {
+    document.getElementById('pfeedback').innerHTML = `<div style="font-size:2rem;font-weight:900;color:rgba(255,255,255,.4)">⏰ Süre Doldu</div><div style="color:rgba(255,255,255,.5);margin-top:.4rem">Puan yok</div>`;
+  } else if (isCorrect) {
+    sfxCorrect(); startPlayerConfetti();
+    document.getElementById('pfeedback').innerHTML = `<div style="font-size:2.5rem;font-weight:900;color:var(--ok);animation:revealPop .35s cubic-bezier(.34,1.56,.64,1)">✓ DOĞRU!</div><div style="color:var(--tt-cyan);font-weight:700;margin-top:.3rem">Toplam Puan: ${myScore}</div>`;
+  } else {
+    sfxWrong();
+    document.getElementById('pfeedback').innerHTML = `<div style="font-size:2.5rem;font-weight:900;color:var(--bad);animation:revealPop .35s cubic-bezier(.34,1.56,.64,1)">✗ YANLIŞ</div><div style="color:rgba(255,255,255,.5);margin-top:.3rem">Toplam Puan: ${myScore}</div>`;
+  }
+}
+
+// ══════════════════════ CONFETTI ══════════════════════
+function startHostConfetti() {
+  // Bir oyuncunun doğru cevap konfetisi hâlâ bitmemişse (ör. son soruya doğru
+  // cevap verilip hemen "Oyunu Bitir"e basıldıysa) onu iptal et — bitiş
+  // konfetisi öncelikli, ikisi aynı canvas'ı paylaştığı için birbirini
+  // yanlışlıkla erken kapatmasınlar.
+  if (confAnimPlayer) { cancelAnimationFrame(confAnimPlayer); confAnimPlayer = null; }
+  const cv = document.getElementById('confetti-canvas'); if(!cv)return;
+  cv.width=innerWidth;cv.height=innerHeight;cv.style.display='block';
+  const colors=['#00B5E2','#002C5F','#ffffff','#f1c40f','#27ae60'];
+  const ps=Array.from({length:160},()=>({x:Math.random()*cv.width,y:Math.random()*-cv.height,w:7+Math.random()*9,h:5+Math.random()*7,r:Math.random()*Math.PI*2,dr:(.015+Math.random()*.04)*(Math.random()<.5?1:-1),vy:2+Math.random()*3.5,vx:(Math.random()-.5)*2.5,color:colors[Math.floor(Math.random()*colors.length)],shape:Math.random()<.4?'circle':'rect',alpha:1}));
+  let frame=0;
+  (function draw(){
+    const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);
+    ps.forEach(p=>{ctx.save();ctx.globalAlpha=p.alpha;ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.fillStyle=p.color;if(p.shape==='circle'){ctx.beginPath();ctx.arc(0,0,p.w/2,0,Math.PI*2);ctx.fill();}else ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();p.x+=p.vx;p.y+=p.vy;p.r+=p.dr;if(p.y>cv.height+20){p.y=-20;p.x=Math.random()*cv.width;}});
+    frame++;
+    if(frame<900) confAnimHost=requestAnimationFrame(draw);
+    else { confAnimHost=null; if(!confAnimPlayer) stopConfetti(); }
+  })();
+}
+function startPlayerConfetti() {
+  const cv = document.getElementById('confetti-canvas'); if(!cv)return;
+  cv.width=innerWidth;cv.height=innerHeight;cv.style.display='block';
+  const colors=['#27ae60','#00B5E2','#fff','#f1c40f'];
+  const cx=cv.width/2,cy=cv.height*.35;
+  const ps=Array.from({length:80},()=>{const a=Math.random()*Math.PI*2,sp=5+Math.random()*9;return{x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-7,w:7+Math.random()*7,h:4+Math.random()*5,r:Math.random()*Math.PI*2,dr:(.04+Math.random()*.07)*(Math.random()<.5?1:-1),color:colors[Math.floor(Math.random()*colors.length)],alpha:1,g:.35};});
+  let frame=0;
+  (function draw(){
+    const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);
+    let alive=false;
+    ps.forEach(p=>{if(p.alpha<=.01)return;alive=true;ctx.save();ctx.globalAlpha=p.alpha;ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.fillStyle=p.color;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();p.x+=p.vx;p.y+=p.vy;p.vy+=p.g;p.vx*=.97;p.r+=p.dr;if(frame>35)p.alpha=Math.max(0,p.alpha-.022);});
+    frame++;
+    if(alive&&frame<140) confAnimPlayer=requestAnimationFrame(draw);
+    else { confAnimPlayer=null; if(!confAnimHost) stopConfetti(); }
+  })();
+}
+function stopConfetti() {
+  if(confAnimHost)cancelAnimationFrame(confAnimHost);
+  if(confAnimPlayer)cancelAnimationFrame(confAnimPlayer);
+  confAnimHost=null; confAnimPlayer=null;
+  const c=document.getElementById('confetti-canvas');
+  if(c){const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);c.style.display='none';}
+}
+window.addEventListener('resize',()=>{const c=document.getElementById('confetti-canvas');if(c&&c.style.display!=='none'){c.width=innerWidth;c.height=innerHeight;}});
+
+// ══════════════════════ EXCEL UPLOAD ══════════════════════
+async function handleExcelUpload(event) {
+  const file = event.target.files[0]; if(!file)return;
+  if(typeof XLSX==='undefined'){toast('Excel kütüphanesi yükleniyor...');setTimeout(()=>handleExcelUpload(event),2000);return;}
+  try {
+    const reader=new FileReader();
+    reader.onload=async e=>{
+      try {
+        const data=new Uint8Array(e.target.result);
+        const wb=XLSX.read(data,{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        const parsed=[];
+        const headers=(rows[0]||[]).map(h=>String(h||'').trim());
+        const fi=(names)=>{
+          for(const n of names){const i=headers.findIndex(h=>h.toLowerCase()===n.toLowerCase());if(i>=0)return i;}
+          return -1;
+        };
+        const iSoru = fi(['Soru Metni','Soru','Question','soru_metni']);
+        const iTip  = fi(['Soru Tipi','Tip','Type','soru_tipi']);
+        const iA    = fi(['A','Seçenek A','Seçenek 1','a']);
+        const iB    = fi(['B','Seçenek B','Seçenek 2','b']);
+        const iC    = fi(['C','Seçenek C','Seçenek 3','c']);
+        const iD    = fi(['D','Seçenek D','Seçenek 4','d']);
+        const iD1   = fi(['Doğru Seçenek 1','Doğru Seçenek','Cevap','dogru_secnek_1','dogru_secenk_1']);
+        const iD2   = fi(['Doğru Seçenek 2','dogru_secnek_2','dogru_secenk_2']);
+        if(iSoru<0){toast('⚠️ "Soru Metni" sütunu bulunamadı.');return;}
+        // Doğru/Yanlış yazım biçimlerinin çoğunu (boşluk, tire, alt çizgi,
+        // Türkçe karakter farkı, İngilizce karşılığı fark etmeksizin) tanır.
+        const TF_PATTERN = /^(2|d\s*\/?\s*y|do[gğ]ru\s*[\/\-_ ]?\s*yanl[iı][şs]|true\s*[\/\-_ ]?\s*false|t\s*\/?\s*f|boolean|bool)$/i;
+        const normTip = t => t.toLowerCase().replace(/\s+/g,' ').trim();
+        const isTfWord = v => ['doğru','dogru','true','1','evet','var'].includes(v) ? true
+                             : ['yanlış','yanlis','false','0','hayır','hayir','yok'].includes(v) ? false
+                             : null;
+
+        for(let i=1;i<rows.length;i++){
+          const row=rows[i];
+          const soruMetni=String(row[iSoru]||'').trim();
+          if(!soruMetni)continue;
+          const tip=iTip>=0?String(row[iTip]||'').trim():'';
+          let seçenekler=[], doğrular=[];
+          if(TF_PATTERN.test(normTip(tip))){
+            // T/F question: always Doğru / Yanlış
+            const doğruCevap=iD1>=0?String(row[iD1]||'').trim().toLowerCase():'';
+            const tf=isTfWord(doğruCevap);
+            const isTrue=tf===null?(doğruCevap==='a'):tf;
+            seçenekler=['Doğru','Yanlış'];
+            doğrular=isTrue?[0]:[1];
+          } else {
+            // Multiple choice: read A B C D columns
+            const opTexts=[iA,iB,iC,iD].map(ci=>ci>=0?String(row[ci]||'').trim():'');
+            seçenekler=opTexts.filter(t=>t!=='');
+            const opMap=opTexts.map((t,j)=>({t,j})).filter(x=>x.t!=='');
+            [iD1,iD2].forEach(di=>{
+              if(di<0)return;
+              const v=String(row[di]||'').trim().toLowerCase();
+              if(!v)return;
+              // Try by letter (a/b/c/d)
+              const letterIdx=['a','b','c','d'].indexOf(v);
+              if(letterIdx>=0){
+                // Find position among non-empty answers
+                const mapped=opMap.findIndex(x=>x.j===letterIdx);
+                if(mapped>=0&&!doğrular.includes(mapped))doğrular.push(mapped);
+              } else {
+                // Try by matching text
+                const matchIdx=opMap.findIndex(x=>x.t.toLowerCase()===v||normAnswerText(x.t).toLowerCase()===v);
+                if(matchIdx>=0&&!doğrular.includes(matchIdx))doğrular.push(matchIdx);
+              }
+            });
+            // "Tip" sütunu boş/tanınmayan bir değerdeyse ve şık sütunları
+            // (A/B/C/D) hiç ya da yalnızca kısmen doldurulmamışsa — kullanıcı
+            // muhtemelen T/F sorusunu şıksız, sadece "Cevap" sütununa
+            // Doğru/Yanlış yazarak girmiştir. Cevap hücresindeki kelimeye
+            // bakıp otomatik olarak Doğru/Yanlış'a çeviriyoruz. Bunu
+            // yapmazsak satır 0 ya da 1 şıklı kalır ki bu geçersizdir.
+            if(seçenekler.length<2){
+              const rawAns=iD1>=0?String(row[iD1]||'').trim().toLowerCase():'';
+              const tf=isTfWord(rawAns);
+              if(tf!==null){ seçenekler=['Doğru','Yanlış']; doğrular=tf?[0]:[1]; }
+            }
+          }
+          if(seçenekler.length<2){toast(`⚠️ ${i+1}. satırda en az 2 şık gerekli (${seçenekler.length} bulundu), atlandı.`);continue;}
+          parsed.push({text:soruMetni,time:20,pts:'standard',answers:seçenekler.map((txt,j)=>({text:txt,correct:doğrular.includes(j)}))});
+        }
+        if(parsed.length){questions=[...questions,...parsed];saveQ();renderQL();if(selQIdx<0&&questions.length>0){selQIdx=0;renderE(0);}toast(`✅ ${parsed.length} soru yüklendi!`);}
+        else toast('⚠️ Soru bulunamadı. Sütun başlıklarını kontrol edin.');
+      }catch(er){toast('❌ Hata: '+er.message);}
+    };
+    reader.readAsArrayBuffer(file);
+  }catch(er){toast('❌ Dosya hatası: '+er.message);}
+  event.target.value='';
+}
+
+// ══════════════════════ RADYO PLAYER ══════════════════════
+// NOT (önemli): Bu istasyonlar önceden /api/radio/stream proxy'si üzerinden
+// açılıyordu — bu da isteğin Render'ın sunucu IP'sinden gitmesine yol
+// açıyordu. SomaFM, bilinen bulut/datacenter IP aralıklarını (Render dahil)
+// bant genişliği istismarını önlemek için engelliyor, bu yüzden "403
+// Forbidden" alıyorduk. Çözüm: SomaFM zaten doğrudan tarayıcı bağlantısına
+// izin veriyor (CORS açık) — proxy'yi atlayıp doğrudan bağlanınca istek
+// artık kullanıcının kendi ağından gidiyor, engele takılmıyor.
+const RADIO_STATIONS = [
+  // Türkçe — test edilip çalıştığı doğrulandı (HTTPS, tarayıcıdan doğrudan)
+  { name:'🇹🇷 Alem FM',           url: 'https://turkmedya.radyotvonline.net/alemfmaac' },
+  { name:'🇹🇷 PowerTürk',           url: 'https://live.powerapp.com.tr/powerturk/abr/playlist.m3u8' },
+  { name:'🇹🇷 Slow Türk',           url: 'https://radyo.duhnet.tv/ak_dtvh_slowturk' },
+  { name:'🎷 Lounge (Ambient)',   url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
+  { name:'🕵 Ajan / Gerilim',     url: 'https://ice1.somafm.com/secretagent-128-mp3' },
+  { name:'⚡ 80\'ler Underground', url: 'https://ice1.somafm.com/u80s-128-mp3' },
+  { name:'🎸 Indie Pop',          url: 'https://ice1.somafm.com/indiepop-128-mp3' },
+  { name:'🌙 Ambient / Drone',    url: 'https://ice1.somafm.com/dronezone-128-mp3' },
+  { name:'🍸 Lounge Bar',         url: 'https://ice1.somafm.com/illstreet-128-mp3' },
+  { name:'🤠 Country / Roots',    url: 'https://ice1.somafm.com/bootliquor-128-mp3' },
+  { name:'🕺 70\'ler',            url: 'https://ice1.somafm.com/seventies-128-mp3' },
+  { name:'🎉 Pop',                url: 'https://ice1.somafm.com/poptron-128-mp3' },
+  { name:'🎷 Jazz / Elektronik',  url: 'https://ice1.somafm.com/sonicuniverse-128-mp3' },
+];
+let radioHls = null, radioPlaying = false, radioCurrent = -1;
+let _radioDuckIv = null;         // aktif fade interval'i
+let _radioDucked = false;
+const RADIO_NORMAL_VOL = 0.75;
+const RADIO_DUCK_VOL   = 0.18;
+
+function _buildRadioList() {
+  const list = document.getElementById('radio-list');
+  if (!list || list.children.length) return;
+  RADIO_STATIONS.forEach((st, i) => {
+    const btn = document.createElement('button');
+    btn.id = 'radio-s-' + i;
+    btn.textContent = st.name;
+    btn.style.cssText = 'width:100%;text-align:left;background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.85);padding:.45rem .7rem;border-radius:7px;cursor:pointer;font-size:.82rem;font-family:inherit';
+    btn.onmouseover = () => btn.style.background = 'rgba(0,181,226,.25)';
+    btn.onmouseout  = () => btn.style.background = (radioCurrent===i ? 'rgba(0,181,226,.35)' : 'rgba(255,255,255,.06)');
+    btn.onclick = () => radioSelect(i);
+    list.appendChild(btn);
+  });
+}
+function toggleRadioPanel() {
+  const p = document.getElementById('radio-panel');
+  if (!p) return;
+  p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+  p.style.flexDirection = 'column';
+  _buildRadioList();
+}
+function closeRadio() {
+  document.getElementById('radio-panel').style.display = 'none';
+}
+function radioSelect(i) {
+  radioCurrent = i;
+  document.querySelectorAll('[id^="radio-s-"]').forEach((b,j)=>{
+    b.style.background = j===i ? 'rgba(0,181,226,.35)' : 'rgba(255,255,255,.06)';
+  });
+  document.getElementById('radio-now').textContent = RADIO_STATIONS[i].name;
+  _radioLoad(RADIO_STATIONS[i].url);
+}
+function _radioLoad(url) {
+  const audio = document.getElementById('radio-audio');
+  if (radioHls) { radioHls.destroy(); radioHls = null; }
+  audio.volume = RADIO_NORMAL_VOL;
+  // Proxy URL'leri her zaman düz MP3 akışıdır (m3u8 HLS sunucu proxy'den geçemez)
+  // Ancak m3u8 içeren orijinal URL için HLS.js'yi proxy URL üzerinde de dene
+  if (Hls.isSupported() && (url.includes('.m3u8') || url.includes('m3u8'))) {
+    radioHls = new Hls();
+    radioHls.loadSource(url);
+    radioHls.attachMedia(audio);
+    radioHls.on(Hls.Events.MANIFEST_PARSED, () => { audio.play(); radioPlaying = true; _updateRadioBtn(); });
+    radioHls.on(Hls.Events.ERROR, (e,d) => {
+      if (d.fatal) {
+        radioHls.destroy(); radioHls = null;
+        // HLS başarısız: doğrudan src dene
+        audio.src = url; audio.play().catch(()=>{});
+        radioPlaying = true; _updateRadioBtn();
+      }
+    });
+  } else {
+    audio.src = url;
+    audio.play().catch(() => toast('📻 Bu kanal açılamadı, başka kanal deneyin.'));
+    radioPlaying = true; _updateRadioBtn();
+  }
+}
+function toggleRadio() {
+  const audio = document.getElementById('radio-audio');
+  if (radioCurrent < 0) { toast('📻 Önce bir kanal seçin'); return; }
+  if (radioPlaying) { audio.pause(); radioPlaying = false; }
+  else { audio.play().catch(()=>{}); radioPlaying = true; }
+  _updateRadioBtn();
+}
+// Radyo sesini kıs/aç — soru gelince kıs, soru bitince aç
+// (müzik açık olsun ya da olmasın, soru fazında radyo kısılır)
+const MUSIC_NORMAL_GAIN = 0.1, MUSIC_DUCK_GAIN = 0.02;
+// Soru ekrana geldiğinde/kalktığında hem canlı radyo stream'ini hem de
+// prosedürel arkaplan müziğini (musicGain) birlikte kısar/normale döndürür.
+// Önceden sadece radyo stream'i kısılıyordu, bg müzik (varsayılan seçenek)
+// hiç kısılmıyordu — ikisi ayrı ses sistemleri olduğu için.
+function _radioDuck(duck) {
+  if (_radioDucked === duck) return;   // zaten o haldeyse tekrarlama
+  _radioDucked = duck;
+
+  // 1) Canlı radyo stream'i (varsa çalıyorsa)
+  const audio = document.getElementById('radio-audio');
+  if (audio && radioPlaying) {
+    const target = duck ? RADIO_DUCK_VOL : RADIO_NORMAL_VOL;
+    if (_radioDuckIv) clearInterval(_radioDuckIv);
+    const steps = 15;
+    let count = 0;
+    const start = audio.volume;
+    _radioDuckIv = setInterval(() => {
+      count++;
+      audio.volume = Math.max(0, Math.min(1, start + (target - start) * (count / steps)));
+      if (count >= steps) { audio.volume = target; clearInterval(_radioDuckIv); _radioDuckIv = null; }
+    }, 25);
+  }
+
+  // 2) Arkaplan müzik motoru (Web Audio API gain node)
+  if (musicGain) {
+    const targetGain = duck ? MUSIC_DUCK_GAIN : MUSIC_NORMAL_GAIN;
+    musicGain.gain.cancelScheduledValues(AC.currentTime);
+    musicGain.gain.setValueAtTime(musicGain.gain.value, AC.currentTime);
+    musicGain.gain.linearRampToValueAtTime(targetGain, AC.currentTime + 0.4);
+  }
+}
+
+
+function _updateRadioBtn() {
+  const btn = document.getElementById('radio-playbtn');
+  if (btn) btn.textContent = radioPlaying ? '⏸' : '▶';
+}
+
+// ══════════════════════ OTOMATİK GERİBİLDİRİM ══════════════════════
+// Host isterse (varsayılan kapalı): belirli sorulara yanlış cevap veren
+// katılımcılara sınav sonunda özel bir mesaj/görsel gösterilir. Kurallar
+// mevcut soru setine göre kurulur, bu yüzden soru sayısı/sırası değişirse
+// host kuralları gözden geçirmeli.
+let fbEnabled = JSON.parse(localStorage.getItem('ql_fb_enabled') || 'false');
+let fbRules   = JSON.parse(localStorage.getItem('ql_fb_rules') || '[]'); // [{qIdxs:[0,2], message:'', imageUrl:''}]
+
+function openFeedbackModal() {
+  document.getElementById('modal-feedback').style.display = 'flex';
+  document.getElementById('fb-enabled').checked = fbEnabled;
+  if (!fbRules.length) fbRules = [{ qIdxs: [], message: '', imageUrl: '' }];
+  renderFbRules();
+}
+function closeFeedbackModal() { document.getElementById('modal-feedback').style.display = 'none'; }
+function onFbToggle() { /* sadece kaydet anında okunuyor, burada ekstra bir şey gerekmiyor */ }
+
+function renderFbRules() {
+  const wrap = document.getElementById('fb-rules');
+  if (!questions.length) {
+    wrap.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:.85rem;padding:.6rem 0">Önce soru ekleyin, kurallar sorulara göre kurulur.</div>';
+    return;
+  }
+  wrap.innerHTML = fbRules.map((rule, ri) => `
+    <div style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:.8rem;margin-bottom:.7rem">
+      <div style="display:flex;align-items:center;margin-bottom:.5rem">
+        <span style="font-weight:700;font-size:.85rem;color:var(--tt-cyan)">Kural ${ri + 1}</span>
+        <span style="margin-left:auto;color:var(--bad);cursor:pointer;font-weight:900" onclick="removeFbRule(${ri})" title="Kuralı sil">✕</span>
+      </div>
+      <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:.4rem">Şu sorulara yanlış cevap verenler (ya da hiç cevaplamayanlar):</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.7rem">
+        ${questions.map((q, qi) => `
+          <label style="display:flex;align-items:center;gap:.3rem;background:${rule.qIdxs.includes(qi)?'var(--tt-cyan)':'rgba(255,255,255,.07)'};color:${rule.qIdxs.includes(qi)?'#fff':'rgba(255,255,255,.7)'};border-radius:7px;padding:.25rem .55rem;font-size:.78rem;cursor:pointer" title="${escHtml(q.text||'')}">
+            <input type="checkbox" style="display:none" ${rule.qIdxs.includes(qi)?'checked':''} onchange="toggleFbQ(${ri},${qi})">
+            Soru ${qi + 1}
+          </label>`).join('')}
+      </div>
+      <textarea rows="2" placeholder="Bu katılımcıya gösterilecek geribildirim metni..." style="width:100%;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;padding:.5rem;font-family:inherit;font-size:.85rem" oninput="fbRules[${ri}].message=this.value">${rule.message || ''}</textarea>
+      <input type="text" placeholder="Opsiyonel görsel/link URL'si (https://...)" value="${rule.imageUrl || ''}" style="width:100%;margin-top:.4rem;background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;padding:.5rem;font-size:.82rem" oninput="fbRules[${ri}].imageUrl=this.value">
+    </div>
+  `).join('');
+}
+function toggleFbQ(ri, qi) {
+  const idx = fbRules[ri].qIdxs.indexOf(qi);
+  if (idx >= 0) fbRules[ri].qIdxs.splice(idx, 1); else fbRules[ri].qIdxs.push(qi);
+  renderFbRules();
+}
+function addFbRule() { fbRules.push({ qIdxs: [], message: '', imageUrl: '' }); renderFbRules(); }
+function removeFbRule(ri) { fbRules.splice(ri, 1); renderFbRules(); }
+function saveFbRules() {
+  fbEnabled = document.getElementById('fb-enabled').checked;
+  const cleanRules = fbRules.filter(r => r.qIdxs.length && r.message.trim());
+  if (fbEnabled && !cleanRules.length) {
+    toast('⚠️ En az bir kural için soru seçip mesaj yazmalısınız, ya da özelliği kapatın.');
+    return;
+  }
+  fbRules = cleanRules;
+  localStorage.setItem('ql_fb_enabled', JSON.stringify(fbEnabled));
+  localStorage.setItem('ql_fb_rules', JSON.stringify(fbRules));
+  const badge = document.getElementById('fb-badge');
+  if (badge) badge.style.display = (fbEnabled && fbRules.length) ? '' : 'none';
+  closeFeedbackModal();
+  toast(fbEnabled ? '✅ Geribildirim bu sınavda aktif' : 'Geribildirim kapalı');
+}
+(function initFbBadge() {
+  const badge = document.getElementById('fb-badge');
+  if (badge) badge.style.display = (fbEnabled && fbRules.length) ? '' : 'none';
+})();
+
+// ══════════════════════ RAPORLAR ══════════════════════
+let reportTitlesById = {};
+let cachedReportSessions = null;
+async function openReportsModal() {
+  document.getElementById('modal-reports').style.display = 'flex';
+  const list = document.getElementById('reports-list');
+  // Önceden bir kez açıldıysa elimizdeki veriyi ANINDA göster (gecikme
+  // hissi olmasın), sonra arka planda sessizce tazele. İlk açılışta
+  // (cache yokken) elbette normal yükleniyor göstergesi çıkıyor.
+  if (cachedReportSessions) {
+    renderReportsList(cachedReportSessions);
+    fetchReportsList(false);
+  } else {
+    list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Yükleniyor...</div>';
+    fetchReportsList(true);
+  }
+}
+async function fetchReportsList(showLoadingOnError) {
+  try {
+    const sessions = await apiCall('/reports/sessions');
+    cachedReportSessions = sessions;
+    renderReportsList(sessions);
+  } catch(e) {
+    if (showLoadingOnError) {
+      document.getElementById('reports-list').innerHTML = `<div style="text-align:center;color:var(--bad);padding:2rem">Yüklenemedi: ${escHtml(e.message || '')}</div>`;
+    }
+    // Arka plan tazelemesi başarısız olduysa (ör. geçici ağ sorunu) elimizdeki
+    // cache'i ekranda bırakıyoruz, kullanıcıyı boş ekranla karşılamıyoruz.
+  }
+}
+function renderReportsList(sessions) {
+  const list = document.getElementById('reports-list');
+  if (!sessions.length) {
+    list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Henüz tamamlanmış bir oturum yok.</div>';
+    return;
+  }
+  const canDelete = currentRole === 'admin';
+  reportTitlesById = {};
+  sessions.forEach(s => { reportTitlesById[s.id] = s.title || 'oturum'; });
+  list.innerHTML = sessions.map(s => {
+    const date = s.endedAt ? new Date(s.endedAt).toLocaleString('tr-TR') : '-';
+    return `<div style="display:flex;align-items:center;gap:.8rem;padding:.8rem;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(s.title || '(Başlıksız)')}</div>
+        <div style="font-size:.78rem;color:rgba(255,255,255,.45)">${date} · ${s.category ? escHtml(s.category)+' · ' : ''}${s.playerCount ?? 0} katılımcı · ${s.questionCount ?? 0} soru · Host: ${escHtml(s.hostSicil || '-')}</div>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="downloadReport(${s.id})">⬇ Excel</button>
+      ${canDelete ? `<button class="btn btn-sm btn-danger" style="padding:.4rem .6rem" title="Bu oturum kaydını sil" onclick="deleteReportSession(${s.id})">✕</button>` : ''}
+    </div>`;
+  }).join('');
+}
+async function deleteReportSession(id) {
+  const title = reportTitlesById[id] || 'bu oturum';
+  if (!confirm(`"${title}" raporu kalıcı olarak silinsin mi? Bu işlem geri alınamaz.`)) return;
+  try {
+    await apiCall('/reports/sessions/' + id, 'DELETE');
+    cachedReportSessions = (cachedReportSessions || []).filter(s => s.id !== id);
+    renderReportsList(cachedReportSessions);
+    toast('Oturum kaydı silindi ✓');
+  } catch(e) { toast('Silinemedi: ' + e.message); }
+}
+function closeReportsModal() { document.getElementById('modal-reports').style.display = 'none'; }
+
+async function downloadReport(id) {
+  const title = reportTitlesById[id] || 'oturum';
+  try {
+    const res = await fetch(`/api/reports/sessions/${id}/export`, {
+      headers: { 'Authorization': 'Bearer ' + authToken },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Rapor indirilemedi');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title}-rapor.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    toast('❌ ' + (e.message || 'Rapor indirilemedi'));
+  }
+}
+
+// ══════════════════════ AI WIDGET ══════════════════════
+let aiCurrentTab = 'quiz';
+function openAiModal() {
+  const m = document.getElementById('modal-ai');
+  m.style.display = 'flex';
+  if (!document.getElementById('ai-chat-msgs').children.length) {
+    _aiChatAppend('bot', '👋 Merhaba! Sana quiz sonuçları ve performans verileri hakkında yardımcı olabilirim. Ne öğrenmek istersin?');
+  }
+}
+function closeAiModal() { document.getElementById('modal-ai').style.display = 'none'; }
+function switchAiTab(tab) {
+  aiCurrentTab = tab;
+  document.getElementById('ai-panel-quiz').style.display = tab==='quiz' ? 'flex' : 'none';
+  document.getElementById('ai-panel-chat').style.display = tab==='chat' ? 'flex' : 'none';
+  document.getElementById('ai-tab-quiz').style.background = tab==='quiz' ? 'var(--tt-cyan)' : 'rgba(255,255,255,.08)';
+  document.getElementById('ai-tab-quiz').style.color = tab==='quiz' ? '#fff' : 'rgba(255,255,255,.7)';
+  document.getElementById('ai-tab-chat').style.background = tab==='chat' ? 'var(--tt-cyan)' : 'rgba(255,255,255,.08)';
+  document.getElementById('ai-tab-chat').style.color = tab==='chat' ? '#fff' : 'rgba(255,255,255,.7)';
+}
+let aiGenMode = 'topic';
+function switchAiGenMode(mode) {
+  aiGenMode = mode;
+  document.getElementById('ai-gen-topic-fields').style.display = mode === 'topic' ? 'block' : 'none';
+  document.getElementById('ai-gen-file-fields').style.display = mode === 'file' ? 'block' : 'none';
+  document.getElementById('ai-mode-topic').style.background = mode === 'topic' ? 'var(--tt-cyan)' : 'transparent';
+  document.getElementById('ai-mode-topic').style.color = mode === 'topic' ? '#fff' : 'rgba(255,255,255,.6)';
+  document.getElementById('ai-mode-file').style.background = mode === 'file' ? 'var(--tt-cyan)' : 'transparent';
+  document.getElementById('ai-mode-file').style.color = mode === 'file' ? '#fff' : 'rgba(255,255,255,.6)';
+}
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.id === 'ai-file-input') {
+    const f = e.target.files?.[0];
+    document.getElementById('ai-file-name').textContent = f ? `📎 ${f.name} (${(f.size/1024).toFixed(0)} KB)` : '';
+  }
+});
+
+async function aiGenerateQuiz() {
+  const count = parseInt(document.getElementById('ai-count').value) || 10;
+  const btn = document.getElementById('ai-gen-btn');
+  const res = document.getElementById('ai-quiz-result');
+  res.style.display = 'none'; res.innerHTML = '';
+
+  let data;
+  try {
+    if (aiGenMode === 'file') {
+      const fileInput = document.getElementById('ai-file-input');
+      const file = fileInput.files?.[0];
+      if (!file) { toast('Bir dosya seçin'); return; }
+      btn.textContent = '⏳ Doküman okunuyor ve sorular üretiliyor...'; btn.disabled = true;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('count', count);
+      const r = await fetch('/api/ai/generate-quiz-from-file', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + authToken },
+        body: formData,
+      });
+      data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Sunucu hatası');
+      if (data.truncated) toast('⚠️ Doküman uzun olduğu için bir kısmından soru üretildi');
+    } else {
+      const topic = document.getElementById('ai-topic').value.trim();
+      if (!topic) { toast('Konu girin'); return; }
+      btn.textContent = '⏳ Üretiliyor...'; btn.disabled = true;
+      data = await apiCall('/ai/generate-quiz', 'POST', { topic, count });
+    }
+  } catch(e) {
+    toast('❌ ' + (e.message || 'Soru üretilemedi'));
+    btn.textContent = '✨ Oluştur'; btn.disabled = false;
+    return;
+  }
+
+  try {
+    if (!data.questions?.length) { toast('Soru üretilemedi'); return; }
+    res.style.display = 'flex';
+    data.questions.forEach((q, qi) => {
+      const d = document.createElement('div');
+      d.style.cssText = 'background:rgba(255,255,255,.06);border-radius:8px;padding:.7rem;font-size:.82rem';
+      const correct = q.answers.find(a => a.correct);
+      d.innerHTML = `<div style="font-weight:700;margin-bottom:.3rem">${qi+1}. ${q.text}</div>` +
+        q.answers.map(a => `<div style="color:${a.correct?'#4ade80':'rgba(255,255,255,.55)'}">${a.correct?'✓':'·'} ${a.text}</div>`).join('') +
+        `<div style="color:rgba(255,255,255,.4);margin-top:.3rem;font-size:.75rem">Süre: ${q.time || 20}s</div>`;
+      res.appendChild(d);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-success';
+    addBtn.textContent = `✅ ${data.questions.length} Soruyu Ekle`;
+    addBtn.onclick = () => {
+      data.questions.forEach(q => questions.push({
+        text: q.text,
+        time: q.time || 20,
+        pts: q.pts || 'standard',
+        answers: q.answers  // already [{text, correct}] from AI
+      }));
+      renderQL();
+      closeAiModal();
+      toast(`✅ ${data.questions.length} AI sorusu eklendi!`);
+    };
+    res.appendChild(addBtn);
+  } catch(e) { toast('❌ AI hatası: ' + (e.message||'Bilinmeyen hata')); }
+  finally { btn.textContent = '✨ Oluştur'; btn.disabled = false; }
+}
+function _aiChatAppend(role, text) {
+  const msgs = document.getElementById('ai-chat-msgs');
+  const d = document.createElement('div');
+  d.style.cssText = `max-width:85%;padding:.55rem .8rem;border-radius:10px;font-size:.82rem;line-height:1.4;` +
+    (role==='user'
+      ? 'align-self:flex-end;background:var(--tt-cyan);color:#fff;margin-left:auto'
+      : 'align-self:flex-start;background:rgba(255,255,255,.1);color:rgba(255,255,255,.9)');
+  d.textContent = text;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+async function aiSendChat() {
+  const inp = document.getElementById('ai-chat-input');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = '';
+  _aiChatAppend('user', msg);
+  _aiChatAppend('bot', '⏳ Düşünüyorum...');
+  try {
+    const data = await apiCall('/ai/chat', 'POST', { message: msg });
+    const msgs = document.getElementById('ai-chat-msgs');
+    msgs.lastChild.textContent = data.reply || '—';
+  } catch(e) {
+    const msgs = document.getElementById('ai-chat-msgs');
+    msgs.lastChild.textContent = '❌ Hata: ' + (e.message||'AI yanıt vermedi');
+  }
+}
+
+// ══════════════════════ ANSWER TEXT NORMALIZER ══════════════════════
+function normAnswerText(text) {
+  const t = (text || '').trim().toLowerCase();
+  if (t === 'true' || t === 'doğru' || t === 'dogru') return 'Doğru';
+  if (t === 'false' || t === 'yanlış' || t === 'yanlis') return 'Yanlış';
+  return text;
+}
+
+// ══════════════════════ INIT ══════════════════════
+window.addEventListener('load', async () => {
+  renderQL();
+  const joinPin = new URLSearchParams(location.search).get('join');
+  if (joinPin) { show('join'); document.getElementById('join-pin').value = joinPin; return; }
+  // Auto-restore session if already logged in
+  if (authToken && currentRole) {
+    try {
+      // Verify token is still valid by fetching question sets
+      await apiCall('/question-sets');
+      await afterLogin();
+    } catch(e) {
+      // Token expired/invalid — clear and show landing
+      logout();
+    }
+  }
+});
+</script>
+</body>
+</html>
