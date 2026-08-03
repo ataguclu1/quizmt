@@ -515,7 +515,14 @@ select{color-scheme:dark}
     <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
       <span style="font-size:1.1rem">📊</span>
       <span style="font-weight:800;color:var(--tt-cyan);flex:1">Oturum Raporları</span>
+      <button id="reports-filter-toggle" title="Filtre" onclick="toggleReportsFilterPanel()" style="background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;padding:0 .5rem;cursor:pointer;font-size:.9rem">🔽</button>
       <button onclick="closeReportsModal()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
+    </div>
+    <div id="reports-filter-panel" style="display:none;padding:0 1.2rem 1rem;border-bottom:1px solid var(--border);background:rgba(0,0,0,.03)">
+      <div style="display:flex;gap:.6rem;align-items:center;margin-top:.6rem">
+        <input type="text" id="reports-search" placeholder="🔍 Sınav adı, host ara..." style="flex:1;padding:.5rem .7rem;background:rgba(255,255,255,.04);border:1px solid var(--border);color:#fff;border-radius:7px;font-size:.85rem" oninput="renderReportsList(cachedReportSessions)">
+        <button onclick="clearReportFilters()" style="background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-size:.85rem;padding:0;text-decoration:underline">✕ Filtreyi temizle</button>
+      </div>
     </div>
     <div style="flex:1;overflow-y:auto;padding:1rem" id="reports-list">
       <div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Yükleniyor...</div>
@@ -1724,6 +1731,20 @@ function clearLibFilters() {
   if (creator) creator.value = '';
   renderLibraryList();
 }
+
+function toggleReportsFilterPanel() {
+  const panel = document.getElementById('reports-filter-panel');
+  const btn = document.getElementById('reports-filter-toggle');
+  const open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if (btn) btn.style.background = open ? 'rgba(255,255,255,.07)' : 'var(--tt-cyan)';
+}
+
+function clearReportFilters() {
+  const s = document.getElementById('reports-search');
+  if (s) s.value = '';
+  renderReportsList(cachedReportSessions || []);
+}
 function renderLibraryList() {
   const el = document.getElementById('lib-list');
   if (!el) return;
@@ -2164,9 +2185,28 @@ function revealQuestionWithCountdown(qIdx, q) {
   const tick = () => {
     if (n === 0) {
       setTimeout(() => {
-        overlay.style.display = 'none';
-        if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q);
-        else if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+        // Eğer soru çift puan ise kısa bir "⚡ Çift Puan" ibaresi göster, sonra soruyu aç
+        if (q && q.pts === 'double') {
+          let db = document.getElementById('double-badge');
+          if (!db) {
+            db = document.createElement('div');
+            db.id = 'double-badge';
+            db.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:rgba(0,0,0,.75);border:2px solid var(--tt-cyan);color:var(--tt-cyan);padding:.8rem 1.2rem;border-radius:12px;font-weight:800;z-index:99999;font-size:1.1rem';
+            document.body.appendChild(db);
+          }
+          db.textContent = '⚡ Çift Puan!';
+          db.style.display = 'block';
+          setTimeout(() => {
+            db.style.display = 'none';
+            overlay.style.display = 'none';
+            if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q);
+            else if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+          }, 850);
+        } else {
+          overlay.style.display = 'none';
+          if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q);
+          else if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+        }
       }, 300);
       return;
     }
@@ -2222,11 +2262,13 @@ let voicePlayToken = 0;
 function playVoiceQuestionAudio(qIdx, q) {
   const player = document.getElementById('voiceq-player');
   const myToken = ++voicePlayToken;
+  console.debug('[voice] playVoiceQuestionAudio start', { token: myToken, qIdx, hasAudio: !!(q && q.audioData) });
   let finished = false;
   let safetyTimeout;
-  const finish = () => {
-    if (finished || myToken !== voicePlayToken) return;
+  const finish = (reason) => {
+    if (finished || myToken !== voicePlayToken) { console.debug('[voice] finish ignored', { reason, token: myToken }); return; }
     finished = true;
+    console.debug('[voice] finishing playback', { token: myToken, reason });
     // KÖK NEDEN DÜZELTMESİ: Ses normal şekilde bitip buraya girildiğinde bile
     // bekleyen 60sn'lik güvenlik zaman aşımını MUTLAKA iptal ediyoruz.
     // Önceden bu satır eksikti — bu yüzden ses normal bitse bile, tam 60
@@ -2242,15 +2284,15 @@ function playVoiceQuestionAudio(qIdx, q) {
     voicePendingQIdx = null; voicePendingQ = null;
     if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
   };
-  if (!q.audioData) { finish(); return; } // ses verisi yoksa (beklenmedik) soruya geç, sınav kilitli kalmasın
+  if (!q.audioData) { finish('no-audio'); return; } // ses verisi yoksa (beklenmedik) soruya geç, sınav kilitli kalmasın
   player.src = q.audioData;
-  player.onended = finish;
+  player.onended = () => finish('ended');
   // Ses bir sebeple hiç yüklenmez/çalmazsa (bozuk veri, tarayıcı engeli vb.)
   // sınav sonsuza dek "sesli soru" ekranında takılı kalmasın diye güvenlik
   // zaman aşımı — makul en uzun senaryo metni için fazlasıyla yeterli süre.
-  safetyTimeout = setTimeout(finish, 60000);
-  player.onerror = finish;
-  player.play().catch(finish);
+  safetyTimeout = setTimeout(() => finish('timeout'), 60000);
+  player.onerror = () => finish('error');
+  player.play().catch((err) => { console.debug('[voice] play() rejected', err); finish('play-reject'); });
 }
 
 socket.on('game-started', data => {
@@ -3150,14 +3192,28 @@ async function fetchReportsList(showLoadingOnError) {
 }
 function renderReportsList(sessions) {
   const list = document.getElementById('reports-list');
-  if (!sessions.length) {
+  if (!sessions || !sessions.length) {
     list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Henüz tamamlanmış bir oturum yok.</div>';
     return;
   }
+  const searchText = (document.getElementById('reports-search')?.value || '').trim().toLowerCase();
+  const filtered = sessions.filter(s => {
+    if (searchText) {
+      const hay = ((s.title||'') + ' ' + (s.hostSicil||'') + ' ' + (s.category||'')).toLowerCase();
+      if (!hay.includes(searchText)) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.3);padding:2rem">Filtreyle eşleşen oturum yok.</div>';
+    return;
+  }
+
   const canDelete = currentRole === 'admin';
   reportTitlesById = {};
-  sessions.forEach(s => { reportTitlesById[s.id] = s.title || 'oturum'; });
-  list.innerHTML = sessions.map(s => {
+  filtered.forEach(s => { reportTitlesById[s.id] = s.title || 'oturum'; });
+  list.innerHTML = filtered.map(s => {
     const date = s.endedAt ? new Date(s.endedAt).toLocaleString('tr-TR') : '-';
     return `<div style="display:flex;align-items:center;gap:.8rem;padding:.8rem;border-bottom:1px solid var(--border)">
       <div style="flex:1;min-width:0">
