@@ -2188,6 +2188,11 @@ function startGame() { socket.emit('start-game', { pin: gamePin }); }
 // aldıkları anda tetiklendiği için pratikte eşzamanlı çalışır — sunucu
 // tarafında ekstra bir gecikme/adım eklemeye gerek kalmadan.
 function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
+  clearInts();
+  const existingPlayer = document.getElementById('voiceq-player');
+  if (existingPlayer) {
+    try { existingPlayer.pause(); existingPlayer.currentTime = 0; } catch (e) {}
+  }
   const overlay = document.getElementById('countdown-overlay');
   const numEl = document.getElementById('countdown-num');
   // Önceki sorudan kalmış olabilecek sesli-soru overlay'ini (nadir bir
@@ -2248,6 +2253,12 @@ function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
 // güvenlik zaman aşımı dolarsa) normal soru+şıklar+süre gösterimine geçilir.
 let voicePendingQIdx = null, voicePendingQ = null, voicePendingInitialTimeLeft = undefined;
 function revealVoiceQuestion(qIdx, q, initialTimeLeft) {
+  clearInts();
+  voicePlayToken++;
+  const existingPlayer = document.getElementById('voiceq-player');
+  if (existingPlayer) {
+    try { existingPlayer.pause(); existingPlayer.currentTime = 0; } catch (e) {}
+  }
   voicePendingQIdx = qIdx; voicePendingQ = q; voicePendingInitialTimeLeft = initialTimeLeft;
   const overlay = document.getElementById('voice-overlay');
   const statusEl = document.getElementById('voice-overlay-status');
@@ -2270,6 +2281,12 @@ function revealVoiceQuestion(qIdx, q, initialTimeLeft) {
 }
 function showVoiceQuestion(qIdx, q, initialTimeLeft) {
     // Reconnect sırasında sesli soru oynatma hareketini yeniden kurmak için.
+    clearInts();
+    voicePlayToken++;
+    const existingPlayer = document.getElementById('voiceq-player');
+    if (existingPlayer) {
+      try { existingPlayer.pause(); existingPlayer.currentTime = 0; } catch (e) {}
+    }
     voicePendingQIdx = qIdx;
     voicePendingQ = q;
     voicePendingInitialTimeLeft = initialTimeLeft;
@@ -2371,6 +2388,10 @@ socket.on('question-shown', data => {
 // ══════════════════════ HOST: QUESTION SCREEN ══════════════════════
 function showHostQuestion(qi, initialTimeLeft) {
   stopConfetti(); revealed = false;
+  const voiceOverlay = document.getElementById('voice-overlay');
+  if (voiceOverlay) voiceOverlay.style.display = 'none';
+  const countdownOverlay = document.getElementById('countdown-overlay');
+  if (countdownOverlay) countdownOverlay.style.display = 'none';
   const q = questions[qi];
   timerLeft = (typeof initialTimeLeft === 'number') ? Math.max(0, initialTimeLeft) : q.time || 20;
 
@@ -2727,6 +2748,10 @@ function confirmAvatar() {
 // ══════════════════════ PLAYER: QUESTION ══════════════════════
 function showPlayerQuestion(qi, q, initialTimeLeft) {
   stopConfetti(); if (!q) return;
+  const voiceOverlay = document.getElementById('voice-overlay');
+  if (voiceOverlay) voiceOverlay.style.display = 'none';
+  const countdownOverlay = document.getElementById('countdown-overlay');
+  if (countdownOverlay) countdownOverlay.style.display = 'none';
   myLastChoice = -1;
   const t = q.time || 20;
   // KÖK NEDEN DÜZELTMESİ: Rejoin (F5/bağlantı kopması) sonrası, önceden bu
