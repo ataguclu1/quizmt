@@ -520,13 +520,19 @@ select{color-scheme:dark}
     <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
       <span style="font-size:1.1rem">📊</span>
       <span style="font-weight:800;color:var(--tt-cyan);flex:1">Oturum Raporları</span>
-      <button id="reports-filter-toggle" title="Filtre" onclick="toggleReportsFilterPanel()" style="background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:8px;padding:0 .5rem;cursor:pointer;font-size:.9rem">🔽</button>
+      <button id="reports-filter-toggle" title="Filtre" onclick="toggleReportsFilterPanel()" style="background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:10px;padding:.45rem .8rem;cursor:pointer;font-size:.95rem;min-width:44px;transition:transform .2s ease,background .2s ease">⌄</button>
       <button onclick="closeReportsModal()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
     </div>
     <div id="reports-filter-panel" style="display:none;padding:0 1.2rem 1rem;border-bottom:1px solid var(--border);background:rgba(0,0,0,.03)">
-      <div style="display:flex;gap:.6rem;align-items:center;margin-top:.6rem">
-        <input type="text" id="reports-search" placeholder="🔍 Sınav adı, host ara..." style="flex:1;padding:.5rem .7rem;background:rgba(255,255,255,.04);border:1px solid var(--border);color:#fff;border-radius:7px;font-size:.85rem" oninput="renderReportsList(cachedReportSessions)">
-        <button onclick="clearReportFilters()" style="background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-size:.85rem;padding:0;text-decoration:underline">✕ Filtreyi temizle</button>
+      <div style="display:flex;flex-wrap:wrap;gap:.55rem;align-items:center;margin-top:.6rem">
+        <input type="text" id="reports-search" placeholder="🔍 Sınav adı, host, proje veya oluşturan ara..." style="flex:2;min-width:220px;padding:.55rem .75rem;background:rgba(255,255,255,.04);border:1px solid var(--border);color:#fff;border-radius:10px;font-size:.9rem" oninput="renderReportsList(cachedReportSessions)">
+        <select id="reports-filter-category" onchange="renderReportsList(cachedReportSessions)" style="min-width:160px;padding:.55rem .75rem;background:rgba(255,255,255,.04);border:1px solid var(--border);color:#fff;border-radius:10px;font-size:.9rem">
+          <option value="">Tüm Projeler</option>
+        </select>
+        <select id="reports-filter-creator" onchange="renderReportsList(cachedReportSessions)" style="min-width:180px;padding:.55rem .75rem;background:rgba(255,255,255,.04);border:1px solid var(--border);color:#fff;border-radius:10px;font-size:.9rem">
+          <option value="">Tüm Oluşturanlar</option>
+        </select>
+        <button onclick="clearReportFilters()" style="background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;font-size:.88rem;padding:.2rem .25rem;text-decoration:underline">✕ Filtreyi temizle</button>
       </div>
     </div>
     <div style="flex:1;overflow-y:auto;padding:1rem" id="reports-list">
@@ -798,10 +804,13 @@ select{color-scheme:dark}
 #countdown-num.pop{animation:countPop .5s cubic-bezier(.34,1.56,.64,1)}
 @keyframes voiceIconPulse { 0%,100%{transform:scale(1);opacity:.9} 50%{transform:scale(1.18);opacity:1} }
 @keyframes voiceRingPulse { 0%{transform:scale(.85);opacity:.5} 100%{transform:scale(1.4);opacity:0} }
+@keyframes doubleBadgePulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.06);} }
 .voiceq-icon-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:clamp(120px,28vw,180px);height:clamp(120px,28vw,180px)}
 .voiceq-icon-ring{position:absolute;inset:0;border-radius:50%;border:3px solid var(--tt-cyan);animation:voiceRingPulse 1.4s ease-out infinite}
 .voiceq-icon-ring.r2{animation-delay:.5s}
 #voiceq-icon-anim{position:relative;z-index:1;font-size:clamp(3.2rem,12vw,5rem);animation:voiceIconPulse .6s ease-in-out infinite;filter:drop-shadow(0 0 18px rgba(0,181,226,.5))}
+.double-badge-ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(0,181,226,.7);pointer-events:none;animation:voiceRingPulse 1.4s ease-out infinite}
+.double-badge-icon{position:relative;z-index:1;font-size:3.5rem;animation:doubleBadgePulse .8s ease-in-out infinite;}
 </style>
 
 <!-- ═══ SESLİ SORU İKON/OYNATMA OVERLAY ═══ -->
@@ -1742,12 +1751,19 @@ function toggleReportsFilterPanel() {
   const btn = document.getElementById('reports-filter-toggle');
   const open = panel.style.display !== 'none';
   panel.style.display = open ? 'none' : 'block';
-  if (btn) btn.style.background = open ? 'rgba(255,255,255,.07)' : 'var(--tt-cyan)';
+  if (btn) {
+    btn.style.background = open ? 'rgba(255,255,255,.07)' : 'var(--tt-cyan)';
+    btn.style.transform = open ? 'rotate(0deg)' : 'rotate(180deg)';
+  }
 }
 
 function clearReportFilters() {
   const s = document.getElementById('reports-search');
+  const cat = document.getElementById('reports-filter-category');
+  const creator = document.getElementById('reports-filter-creator');
   if (s) s.value = '';
+  if (cat) cat.value = '';
+  if (creator) creator.value = '';
   renderReportsList(cachedReportSessions || []);
 }
 function renderLibraryList() {
@@ -2252,6 +2268,32 @@ function revealVoiceQuestion(qIdx, q, initialTimeLeft) {
     }
   }, 1000);
 }
+function showVoiceQuestion(qIdx, q, initialTimeLeft) {
+    // Reconnect sırasında sesli soru oynatma hareketini yeniden kurmak için.
+    voicePendingQIdx = qIdx;
+    voicePendingQ = q;
+    voicePendingInitialTimeLeft = initialTimeLeft;
+    const overlay = document.getElementById('voice-overlay');
+    const statusEl = document.getElementById('voice-overlay-status');
+    const triggerBtn = document.getElementById('voice-overlay-trigger-btn');
+    if (!overlay || !statusEl || !triggerBtn) return;
+
+    overlay.style.display = 'flex';
+    statusEl.textContent = 'Sesli soru...';
+    triggerBtn.style.display = 'none';
+
+    setTimeout(() => {
+      if (q.audioAutoplay) {
+        statusEl.textContent = 'Dinleyin...';
+        playVoiceQuestionAudio(qIdx, q, initialTimeLeft);
+      } else if (isHost) {
+        statusEl.textContent = 'Katılımcılara sesi başlatmak için hazır olduğunuzda tıklayın.';
+        triggerBtn.style.display = 'inline-block';
+      } else {
+        statusEl.textContent = 'Sunum yapan kişinin sesi başlatması bekleniyor...';
+      }
+    }, 100);
+}
 function hostTriggerVoicePlay() {
   document.getElementById('voice-overlay-trigger-btn').style.display = 'none';
   document.getElementById('voice-overlay-status').textContent = 'Dinleyin...';
@@ -2479,6 +2521,15 @@ async function downloadCertificate() {
   const canvas = document.createElement('canvas');
   canvas.width = 1200; canvas.height = 850;
   const ctx = canvas.getContext('2d');
+
+  if (document.fonts && document.fonts.load) {
+    await Promise.all([
+      document.fonts.load('900 40px Montserrat'),
+      document.fonts.load('800 46px Montserrat'),
+      document.fonts.load('700 36px Montserrat'),
+      document.fonts.load('700 16px Montserrat'),
+    ]).catch(() => {});
+  }
 
   const grad = ctx.createLinearGradient(0, 0, 1200, 850);
   grad.addColorStop(0, '#001428'); grad.addColorStop(1, '#002C5F');
@@ -3216,15 +3267,35 @@ async function fetchReportsList(showLoadingOnError) {
 function renderReportsList(sessions) {
   const list = document.getElementById('reports-list');
   if (!sessions || !sessions.length) {
-    list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Henüz tamamlanmış bir oturum yok.</div>';
+    if (list) list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Henüz tamamlanmış bir oturum yok.</div>';
     return;
   }
   const searchText = (document.getElementById('reports-search')?.value || '').trim().toLowerCase();
+  const filterCategory = (document.getElementById('reports-filter-category')?.value || '').trim();
+  const filterCreator = (document.getElementById('reports-filter-creator')?.value || '').trim();
+
+  const categories = [...new Set(sessions.map(s => (s.category || 'Diğer').trim()))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'tr'));
+  const creators = [...new Set(sessions.map(s => ((s.createdByName || s.hostSicil || s.createdBy || '').trim()))).filter(Boolean).sort((a, b) => a.localeCompare(b, 'tr'))];
+  const catSel = document.getElementById('reports-filter-category');
+  const creatorSel = document.getElementById('reports-filter-creator');
+  if (catSel) {
+    const current = catSel.value;
+    catSel.innerHTML = '<option value="">Tüm Projeler</option>' + categories.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    catSel.value = current || '';
+  }
+  if (creatorSel) {
+    const current = creatorSel.value;
+    creatorSel.innerHTML = '<option value="">Tüm Oluşturanlar</option>' + creators.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    creatorSel.value = current || '';
+  }
+
   const filtered = sessions.filter(s => {
     if (searchText) {
-      const hay = ((s.title||'') + ' ' + (s.hostSicil||'') + ' ' + (s.category||'')).toLowerCase();
+      const hay = ((s.title||'') + ' ' + (s.hostSicil||'') + ' ' + (s.category||'') + ' ' + (s.createdByName||'') + ' ' + (s.createdBy||'')).toLowerCase();
       if (!hay.includes(searchText)) return false;
     }
+    if (filterCategory && (s.category || 'Diğer') !== filterCategory) return false;
+    if (filterCreator && ((s.createdByName || s.hostSicil || s.createdBy || '') !== filterCreator)) return false;
     return true;
   });
 
