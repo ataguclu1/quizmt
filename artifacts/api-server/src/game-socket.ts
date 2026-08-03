@@ -140,6 +140,7 @@ export function setupSocketIO(httpServer: HttpServer) {
           const qTime = (q?.["time"] as number) || 20;
           const elapsedSec = Math.floor((Date.now() - session.qStartTs) / 1000);
           payload.timeLeft = Math.max(0, qTime - elapsedSec);
+          payload.serverTime = Date.now();
           const myAnswer = player.answers[session.qIdx];
           payload.selected = myAnswer ? myAnswer.choice : null;
         }
@@ -220,7 +221,12 @@ export function setupSocketIO(httpServer: HttpServer) {
 
       const q = getQuestionForPlayers(session, 0);
       io.to(`game-${data.pin}`).emit("game-started", {
-        qIdx: 0, question: q, total: session.questions.length, title: session.title,
+        qIdx: 0,
+        question: q,
+        total: session.questions.length,
+        title: session.title,
+        timeLeft: (q?.["time"] as number) || 20,
+        serverTime: Date.now(),
       });
       logger.info({ pin: data.pin }, "Game started");
     });
@@ -235,7 +241,11 @@ export function setupSocketIO(httpServer: HttpServer) {
       session.qStartTs = Date.now();
 
       io.to(`game-${data.pin}`).emit("question-shown", {
-        qIdx: data.qIdx, question: getQuestionForPlayers(session, data.qIdx), total: session.questions.length,
+        qIdx: data.qIdx,
+        question: getQuestionForPlayers(session, data.qIdx),
+        total: session.questions.length,
+        timeLeft: ((session.questions[data.qIdx] as Record<string, unknown>)?.["time"] as number) || 20,
+        serverTime: Date.now(),
       });
     });
 
@@ -315,13 +325,18 @@ export function setupSocketIO(httpServer: HttpServer) {
     socket.on("next-question", (data: { pin: string }) => {
       const session = sessions.get(data.pin);
       if (!session || session.hostSocketId !== socket.id) return;
-
+ 
       session.qIdx++;
       session.phase = "question";
       session.qStartTs = Date.now();
-
+ 
+      const q = session.questions[session.qIdx] as Record<string, unknown>;
       io.to(`game-${data.pin}`).emit("question-shown", {
-        qIdx: session.qIdx, question: getQuestionForPlayers(session, session.qIdx), total: session.questions.length,
+        qIdx: session.qIdx,
+        question: getQuestionForPlayers(session, session.qIdx),
+        total: session.questions.length,
+        timeLeft: (q?.["time"] as number) || 20,
+        serverTime: Date.now(),
       });
     });
 
