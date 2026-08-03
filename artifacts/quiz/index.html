@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
@@ -515,17 +515,17 @@ select{color-scheme:dark}
 </div>
 
 <!-- ═══ RAPORLAR MODAL ═══ -->
-<div id="modal-reports" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:1rem">
-  <div class="card" style="width:640px;max-width:100%;max-height:82vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+<div id="modal-reports" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.75);align-items:flex-start;justify-content:center;padding:2.5rem 1rem 1rem">
+  <div class="card" style="width:640px;max-width:100%;max-height:84vh;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
     <div style="display:flex;align-items:center;gap:.7rem;padding:1rem 1.2rem;border-bottom:1px solid var(--border)">
       <span style="font-size:1.1rem">📊</span>
       <span style="font-weight:800;color:var(--tt-cyan);flex:1">Oturum Raporları</span>
-      <button id="reports-filter-toggle" title="Filtre" onclick="toggleReportsFilterPanel()" style="background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:10px;padding:.45rem .8rem;cursor:pointer;font-size:.95rem;min-width:44px;transition:transform .2s ease,background .2s ease">⌄</button>
+      <button id="reports-filter-toggle" title="Filtre" onclick="toggleReportsFilterPanel()" style="background:rgba(255,255,255,.07);border:1px solid var(--border);color:#fff;border-radius:10px;padding:.45rem .8rem;cursor:pointer;font-size:.95rem;min-width:44px;transition:background .2s ease">▾</button>
       <button onclick="closeReportsModal()" style="background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;font-size:1.2rem;padding:.2rem">✕</button>
     </div>
-    <div id="reports-filter-panel" style="display:none;padding:0 1.2rem 1rem;border-bottom:1px solid var(--border);background:rgba(0,0,0,.03)">
-      <div style="display:flex;flex-wrap:wrap;gap:.55rem;align-items:center;margin-top:.6rem">
-        <input type="text" id="reports-search" placeholder="🔍 Sınav adı, host, proje veya oluşturan ara..." style="flex:2;min-width:220px;padding:.55rem .75rem;background:rgba(255,255,255,.04);border:1px solid var(--border);color:#fff;border-radius:10px;font-size:.9rem" oninput="renderReportsList(cachedReportSessions)">
+    <div id="reports-filter-panel" style="display:none;padding:1rem 1.2rem 1rem;border-bottom:1px solid var(--border);background:rgba(255,255,255,.03)">
+      <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-top:.4rem">
+        <input type="text" id="reports-search" placeholder="🔍 Sınav adı, proje veya oluşturan ara..." style="flex:2;min-width:220px;padding:.55rem .75rem;background:rgba(255,255,255,.04);border:1px solid var(--border);color:#fff;border-radius:10px;font-size:.9rem" oninput="renderReportsList(cachedReportSessions)">
         <select id="reports-filter-category" onchange="renderReportsList(cachedReportSessions)" style="min-width:160px;padding:.55rem .75rem;background:rgba(255,255,255,.04);border:1px solid var(--border);color:#fff;border-radius:10px;font-size:.9rem">
           <option value="">Tüm Projeler</option>
         </select>
@@ -1751,11 +1751,12 @@ function clearLibFilters() {
 function toggleReportsFilterPanel() {
   const panel = document.getElementById('reports-filter-panel');
   const btn = document.getElementById('reports-filter-toggle');
-  const open = panel.style.display !== 'none';
-  panel.style.display = open ? 'none' : 'block';
+  const open = panel.style.display === 'flex';
+  panel.style.display = open ? 'none' : 'flex';
+  panel.style.flexDirection = 'column';
   if (btn) {
     btn.style.background = open ? 'rgba(255,255,255,.07)' : 'var(--tt-cyan)';
-    btn.style.transform = open ? 'rotate(0deg)' : 'rotate(180deg)';
+    btn.textContent = open ? '▾' : '▴';
   }
 }
 
@@ -1766,7 +1767,7 @@ function clearReportFilters() {
   if (s) s.value = '';
   if (cat) cat.value = '';
   if (creator) creator.value = '';
-  renderReportsList(cachedReportSessions || []);
+  renderReportsList(normalizeReportSessions(cachedReportSessions));
 }
 function renderLibraryList() {
   const el = document.getElementById('lib-list');
@@ -2238,7 +2239,7 @@ function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
             if (questionToken !== questionRevealToken) return;
             db.style.display = 'none';
             doubleComplete();
-          }, 850);
+          }, 1400);
           pendingTimeouts.push(id);
         } else {
           doubleComplete();
@@ -2254,7 +2255,7 @@ function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
     }
     numEl.textContent = n;
     numEl.classList.remove('pop'); void numEl.offsetWidth; numEl.classList.add('pop');
-    if (!isVoiceCountDown) sfxCountdown();
+    sfxCountdown();
     n--;
     const id = setTimeout(tick, 700);
     pendingTimeouts.push(id);
@@ -2391,7 +2392,7 @@ function playVoiceQuestionAudio(qIdx, q, initialTimeLeft) {
 function getAdjustedTimeLeft(timeLeft, serverTime) {
   if (typeof timeLeft !== 'number' || typeof serverTime !== 'number') return timeLeft;
   const transitMs = Date.now() - serverTime;
-  const transitSec = Math.max(0, Math.round((transitMs + 500) / 1000));
+  const transitSec = Math.max(0, Math.floor(transitMs / 1000));
   const adjusted = Math.max(0, timeLeft - transitSec);
   console.debug('[time-sync] timeLeft', timeLeft, 'serverTime', serverTime, 'transitMs', transitMs, 'adjusted', adjusted);
   return adjusted;
@@ -2567,13 +2568,18 @@ async function downloadCertificate() {
   canvas.width = 1200; canvas.height = 850;
   const ctx = canvas.getContext('2d');
 
-  if (document.fonts && document.fonts.load) {
-    await Promise.all([
-      document.fonts.load('900 40px Montserrat'),
-      document.fonts.load('800 46px Montserrat'),
-      document.fonts.load('700 36px Montserrat'),
-      document.fonts.load('700 16px Montserrat'),
-    ]).catch(() => {});
+  if (document.fonts) {
+    const fontPromises = [];
+    if (document.fonts.load) {
+      fontPromises.push(document.fonts.load('900 40px Montserrat'));
+      fontPromises.push(document.fonts.load('800 46px Montserrat'));
+      fontPromises.push(document.fonts.load('700 36px Montserrat'));
+      fontPromises.push(document.fonts.load('700 16px Montserrat'));
+    }
+    if (document.fonts.ready) {
+      fontPromises.push(document.fonts.ready);
+    }
+    await Promise.all(fontPromises).catch(() => {});
   }
 
   const grad = ctx.createLinearGradient(0, 0, 1200, 850);
@@ -3286,6 +3292,10 @@ function saveFbRules() {
 // ══════════════════════ RAPORLAR ══════════════════════
 let reportTitlesById = {};
 let cachedReportSessions = null;
+function normalizeReportSessions(sessions) {
+  if (Array.isArray(sessions)) return sessions;
+  return (sessions && Array.isArray(sessions.sessions)) ? sessions.sessions : [];
+}
 async function openReportsModal() {
   document.getElementById('modal-reports').style.display = 'flex';
   const list = document.getElementById('reports-list');
@@ -3293,7 +3303,7 @@ async function openReportsModal() {
   // hissi olmasın), sonra arka planda sessizce tazele. İlk açılışta
   // (cache yokken) elbette normal yükleniyor göstergesi çıkıyor.
   if (cachedReportSessions) {
-    renderReportsList(cachedReportSessions);
+    renderReportsList(normalizeReportSessions(cachedReportSessions));
     fetchReportsList(false);
   } else {
     list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Yükleniyor...</div>';
@@ -3304,7 +3314,7 @@ async function fetchReportsList(showLoadingOnError) {
   try {
     const sessions = await apiCall('/reports/sessions');
     cachedReportSessions = sessions;
-    renderReportsList(sessions);
+    renderReportsList(normalizeReportSessions(sessions));
   } catch(e) {
     if (showLoadingOnError) {
       document.getElementById('reports-list').innerHTML = `<div style="text-align:center;color:var(--bad);padding:2rem">Yüklenemedi: ${escHtml(e.message || '')}</div>`;
@@ -3314,6 +3324,7 @@ async function fetchReportsList(showLoadingOnError) {
   }
 }
 function renderReportsList(sessions) {
+  sessions = normalizeReportSessions(sessions);
   const list = document.getElementById('reports-list');
   if (!sessions || !sessions.length) {
     if (list) list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.4);padding:2rem">Henüz tamamlanmış bir oturum yok.</div>';
