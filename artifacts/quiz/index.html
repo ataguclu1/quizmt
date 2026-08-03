@@ -2166,18 +2166,19 @@ function startGame() { socket.emit('start-game', { pin: gamePin }); }
 // hem oyuncularda ayrı ayrı, aynı 'game-started'/'question-shown' broadcast'i
 // aldıkları anda tetiklendiği için pratikte eşzamanlı çalışır — sunucu
 // tarafında ekstra bir gecikme/adım eklemeye gerek kalmadan.
-function revealQuestionWithCountdown(qIdx, q) {
+function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
   const overlay = document.getElementById('countdown-overlay');
   const numEl = document.getElementById('countdown-num');
   // Önceki sorudan kalmış olabilecek sesli-soru overlay'ini (nadir bir
   // zamanlama durumunda) garanti olarak kapat, yeni soru ekranı temiz başlasın.
   const voiceOverlay = document.getElementById('voice-overlay');
   if (voiceOverlay) voiceOverlay.style.display = 'none';
-  voicePendingQIdx = null; voicePendingQ = null;
+  voicePendingQIdx = null; voicePendingQ = null; voicePendingInitialTimeLeft = undefined;
   voicePlayToken++; // ek güvenlik: önceki soruya ait gecikmeli bir çağrı varsa geçersiz kılınır
 
   if (!overlay || !numEl) { // overlay yoksa (beklenmedik durum) direkt göster
-    if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+    if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q, initialTimeLeft);
+    else if (isHost) showHostQuestion(qIdx, initialTimeLeft); else showPlayerQuestion(qIdx, q, initialTimeLeft);
     return;
   }
   overlay.style.display = 'flex';
@@ -2199,13 +2200,13 @@ function revealQuestionWithCountdown(qIdx, q) {
           setTimeout(() => {
             db.style.display = 'none';
             overlay.style.display = 'none';
-            if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q);
-            else if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+            if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q, initialTimeLeft);
+            else if (isHost) showHostQuestion(qIdx, initialTimeLeft); else showPlayerQuestion(qIdx, q, initialTimeLeft);
           }, 850);
         } else {
           overlay.style.display = 'none';
-          if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q);
-          else if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+          if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q, initialTimeLeft);
+          else if (isHost) showHostQuestion(qIdx, initialTimeLeft); else showPlayerQuestion(qIdx, q, initialTimeLeft);
         }
       }, 300);
       return;
@@ -2223,9 +2224,9 @@ function revealQuestionWithCountdown(qIdx, q) {
 // Akış: 3-2-1 bitince -> 🔊 ikonu ~1sn -> (otomatikse hemen, değilse host'un
 // "Sesi Başlat" tıklamasını bekleyip) ses çalar -> ses biterse (ya da 60sn
 // güvenlik zaman aşımı dolarsa) normal soru+şıklar+süre gösterimine geçilir.
-let voicePendingQIdx = null, voicePendingQ = null;
-function revealVoiceQuestion(qIdx, q) {
-  voicePendingQIdx = qIdx; voicePendingQ = q;
+let voicePendingQIdx = null, voicePendingQ = null, voicePendingInitialTimeLeft = undefined;
+function revealVoiceQuestion(qIdx, q, initialTimeLeft) {
+  voicePendingQIdx = qIdx; voicePendingQ = q; voicePendingInitialTimeLeft = initialTimeLeft;
   const overlay = document.getElementById('voice-overlay');
   const statusEl = document.getElementById('voice-overlay-status');
   const triggerBtn = document.getElementById('voice-overlay-trigger-btn');
@@ -2236,7 +2237,7 @@ function revealVoiceQuestion(qIdx, q) {
   setTimeout(() => {
     if (q.audioAutoplay) {
       statusEl.textContent = 'Dinleyin...';
-      playVoiceQuestionAudio(qIdx, q);
+      playVoiceQuestionAudio(qIdx, q, initialTimeLeft);
     } else if (isHost) {
       statusEl.textContent = 'Katılımcılara sesi başlatmak için hazır olduğunuzda tıklayın.';
       triggerBtn.style.display = 'inline-block';
@@ -2252,17 +2253,17 @@ function hostTriggerVoicePlay() {
 }
 socket.on('voice-playback-triggered', () => {
   if (voicePendingQIdx === null) return;
-  playVoiceQuestionAudio(voicePendingQIdx, voicePendingQ);
+  playVoiceQuestionAudio(voicePendingQIdx, voicePendingQ, voicePendingInitialTimeLeft);
 });
 // Her sesli soru oynatımına artan bir "token" veriyoruz. Bir önceki
 // oynatmadan kalma herhangi bir gecikmeli/geride kalmış çağrı (örn. bir
 // hata payı için varsa da) artık geçerli olmayan bir token taşıyorsa
 // hiçbir şey yapmadan çıkar — ekranı asla ele geçiremez.
 let voicePlayToken = 0;
-function playVoiceQuestionAudio(qIdx, q) {
+function playVoiceQuestionAudio(qIdx, q, initialTimeLeft) {
   const player = document.getElementById('voiceq-player');
   const myToken = ++voicePlayToken;
-  console.debug('[voice] playVoiceQuestionAudio start', { token: myToken, qIdx, hasAudio: !!(q && q.audioData) });
+  console.debug('[voice] playVoiceQuestionAudio start', { token: myToken, qIdx, hasAudio: !!(q && q.audioData), initialTimeLeft });
   let finished = false;
   let safetyTimeout;
   const finish = (reason) => {
@@ -2281,8 +2282,8 @@ function playVoiceQuestionAudio(qIdx, q) {
     player.onended = null;
     player.onerror = null;
     document.getElementById('voice-overlay').style.display = 'none';
-    voicePendingQIdx = null; voicePendingQ = null;
-    if (isHost) showHostQuestion(qIdx); else showPlayerQuestion(qIdx, q);
+    voicePendingQIdx = null; voicePendingQ = null; voicePendingInitialTimeLeft = undefined;
+    if (isHost) showHostQuestion(qIdx, initialTimeLeft); else showPlayerQuestion(qIdx, q, initialTimeLeft);
   };
   if (!q.audioData) { finish('no-audio'); return; } // ses verisi yoksa (beklenmedik) soruya geç, sınav kilitli kalmasın
   player.src = q.audioData;
@@ -2295,21 +2296,32 @@ function playVoiceQuestionAudio(qIdx, q) {
   player.play().catch((err) => { console.debug('[voice] play() rejected', err); finish('play-reject'); });
 }
 
+function getAdjustedTimeLeft(timeLeft, serverTime) {
+  if (typeof timeLeft !== 'number' || typeof serverTime !== 'number') return timeLeft;
+  const transitMs = Date.now() - serverTime;
+  const transitSec = Math.max(0, Math.round((transitMs + 500) / 1000));
+  const adjusted = Math.max(0, timeLeft - transitSec);
+  console.debug('[time-sync] timeLeft', timeLeft, 'serverTime', serverTime, 'transitMs', transitMs, 'adjusted', adjusted);
+  return adjusted;
+}
+
 socket.on('game-started', data => {
   curQIdx = data.qIdx; totalQuestions = data.total; curQuestion = data.question;
   if (data.title) currentQuizTitle = data.title;
-  revealQuestionWithCountdown(curQIdx, curQuestion);
+  const initialTimeLeft = getAdjustedTimeLeft(data.timeLeft, data.serverTime);
+  revealQuestionWithCountdown(curQIdx, curQuestion, initialTimeLeft);
 });
 socket.on('question-shown', data => {
   curQIdx = data.qIdx; totalQuestions = data.total; curQuestion = data.question;
-  revealQuestionWithCountdown(curQIdx, curQuestion);
+  const initialTimeLeft = getAdjustedTimeLeft(data.timeLeft, data.serverTime);
+  revealQuestionWithCountdown(curQIdx, curQuestion, initialTimeLeft);
 });
 
 // ══════════════════════ HOST: QUESTION SCREEN ══════════════════════
-function showHostQuestion(qi) {
+function showHostQuestion(qi, initialTimeLeft) {
   stopConfetti(); revealed = false;
   const q = questions[qi];
-  timerLeft = q.time || 20;
+  timerLeft = (typeof initialTimeLeft === 'number') ? Math.max(0, initialTimeLeft) : q.time || 20;
 
   show('qhost'); setBgMusic('question'); _radioDuck(true);
   const hpb = document.getElementById('host-pin-badge');
