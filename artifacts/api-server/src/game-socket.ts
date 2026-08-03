@@ -23,6 +23,7 @@ interface GameSession {
   questions: unknown[];
   players: Map<string, PlayerData>;
   qStartTs: number;
+  voicePlaybackTriggered?: boolean;
   startedAt?: Date;
   // Host isteğe bağlı olarak kurar: belirli sorulara yanlış cevap veren
   // oyunculara sınav sonunda özel bir geribildirim mesajı/görseli gösterilir.
@@ -78,6 +79,7 @@ export function setupSocketIO(httpServer: HttpServer) {
         questions,
         players: new Map(),
         qStartTs: 0,
+        voicePlaybackTriggered: false,
         startedAt: new Date(),
         feedbackRules: Array.isArray(feedbackRules) && feedbackRules.length ? feedbackRules : undefined,
       });
@@ -144,6 +146,7 @@ export function setupSocketIO(httpServer: HttpServer) {
             : qTime;
           payload.serverTime = Date.now();
           payload.answerStarted = answerStarted;
+          payload.voicePlaybackTriggered = q?.["questionType"] === "voice" && !!session.voicePlaybackTriggered;
           const myAnswer = player.answers[session.qIdx];
           payload.selected = myAnswer ? myAnswer.choice : null;
         }
@@ -229,6 +232,7 @@ export function setupSocketIO(httpServer: HttpServer) {
         timeLeft,
         serverTime: Date.now(),
         answerStarted,
+        voicePlaybackTriggered: isVoice && !!session.voicePlaybackTriggered,
       };
     }
 
@@ -244,6 +248,7 @@ export function setupSocketIO(httpServer: HttpServer) {
       } else {
         session.qStartTs = 0;
       }
+      session.voicePlaybackTriggered = false;
       session.startedAt = new Date();
  
       const payload = buildQuestionPayload(session, 0);
@@ -265,7 +270,8 @@ export function setupSocketIO(httpServer: HttpServer) {
       } else {
         session.qStartTs = 0;
       }
- 
+      session.voicePlaybackTriggered = false;
+  
       const payload = buildQuestionPayload(session, data.qIdx);
       if (!payload) return;
       io.to(`game-${data.pin}`).emit("question-shown", payload);
@@ -307,17 +313,26 @@ export function setupSocketIO(httpServer: HttpServer) {
     socket.on("trigger-voice-play", (data: { pin: string }) => {
       const session = sessions.get(data.pin);
       if (!session || session.hostSocketId !== socket.id) return;
+      session.voicePlaybackTriggered = true;
       io.to(`game-${data.pin}`).emit("voice-playback-triggered", { qIdx: session.qIdx });
     });
- 
+
+    socket.on("voice-playback-started", (data: { pin: string; qIdx: number }) => {
+      const session = sessions.get(data.pin);
+      if (!session || session.hostSocketId !== socket.id || session.phase !== "question" || session.qIdx !== data.qIdx) return;
+      session.voicePlaybackTriggered = true;
+    });
+  
     socket.on("voice-playback-ended", (data: { pin: string; qIdx: number }) => {
       const session = sessions.get(data.pin);
       if (!session || session.phase !== "question" || session.qIdx !== data.qIdx) return;
+      if (socket.id !== session.hostSocketId) return;
       const q = getQuestionForPlayers(session, session.qIdx);
       if (!q || q["questionType"] !== "voice") return;
       if (session.qStartTs === 0) {
         session.qStartTs = Date.now();
       }
+      session.voicePlaybackTriggered = true;
     });
  
     // ── HOST: Reveal answer ───────────────────────────────────────────────

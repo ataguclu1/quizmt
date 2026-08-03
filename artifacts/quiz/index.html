@@ -1259,6 +1259,8 @@ let isReconnectJoin = false;
 // atma) ayıramıyoruz. Bu flag o farkı net şekilde tutuyor.
 let justCancelledByMe = false;
 let timerInt=null, timerLeft=20, revealed=false, curQIdx=0;
+let questionRevealToken = 0;
+let pendingTimeouts = [];
 let confAnimHost=null, confAnimPlayer=null, curQuestion=null, totalQuestions=0, currentQuizTitle='';
 let myScore=0, myLastChoice=-1;
 
@@ -1269,7 +1271,7 @@ function show(id) {
 }
 function toast(m, dur=2800) { const t=document.createElement('div');t.className='toast-c';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),dur); }
 function saveQ() { localStorage.setItem('ql_q', JSON.stringify(questions)); }
-function clearInts() { clearInterval(timerInt); timerInt=null; }
+function clearInts() { clearInterval(timerInt); timerInt=null; pendingTimeouts.forEach(clearTimeout); pendingTimeouts=[]; }
 
 // ══════════════════════ ADMIN ══════════════════════
 function showAdminLogin() { show('admin-login'); setTimeout(()=>document.getElementById('login-sicil')?.focus(), 100); }
@@ -2189,6 +2191,7 @@ function startGame() { socket.emit('start-game', { pin: gamePin }); }
 // tarafında ekstra bir gecikme/adım eklemeye gerek kalmadan.
 function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
   clearInts();
+  const questionToken = ++questionRevealToken;
   const existingPlayer = document.getElementById('voiceq-player');
   if (existingPlayer) {
     try { existingPlayer.pause(); existingPlayer.currentTime = 0; } catch (e) {}
@@ -2211,9 +2214,16 @@ function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
   let n = 3;
   const isVoiceCountDown = q && q.questionType === 'voice';
   const tick = () => {
+    if (questionToken !== questionRevealToken) return;
     if (n === 0) {
-      setTimeout(() => {
-        // Eğer soru çift puan ise kısa bir "⚡ Çift Puan" animasyonu göster, sonra soruyu aç
+      const doubleComplete = () => {
+        overlay.style.display = 'none';
+        if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q, initialTimeLeft);
+        else if (isHost) showHostQuestion(qIdx, initialTimeLeft); else showPlayerQuestion(qIdx, q, initialTimeLeft);
+      };
+
+      const finishReveal = () => {
+        if (questionToken !== questionRevealToken) return;
         if (q && q.pts === 'double') {
           let db = document.getElementById('double-badge');
           if (!db) {
@@ -2224,25 +2234,30 @@ function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
             document.body.appendChild(db);
           }
           db.style.display = 'flex';
-          setTimeout(() => {
+          const id = setTimeout(() => {
+            if (questionToken !== questionRevealToken) return;
             db.style.display = 'none';
-            overlay.style.display = 'none';
-            if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q, initialTimeLeft);
-            else if (isHost) showHostQuestion(qIdx, initialTimeLeft); else showPlayerQuestion(qIdx, q, initialTimeLeft);
+            doubleComplete();
           }, 850);
+          pendingTimeouts.push(id);
         } else {
-          overlay.style.display = 'none';
-          if (q && q.questionType === 'voice') revealVoiceQuestion(qIdx, q, initialTimeLeft);
-          else if (isHost) showHostQuestion(qIdx, initialTimeLeft); else showPlayerQuestion(qIdx, q, initialTimeLeft);
+          doubleComplete();
         }
+      };
+
+      const id = setTimeout(() => {
+        if (questionToken !== questionRevealToken) return;
+        finishReveal();
       }, 300);
+      pendingTimeouts.push(id);
       return;
     }
     numEl.textContent = n;
     numEl.classList.remove('pop'); void numEl.offsetWidth; numEl.classList.add('pop');
     if (!isVoiceCountDown) sfxCountdown();
     n--;
-    setTimeout(tick, 700);
+    const id = setTimeout(tick, 700);
+    pendingTimeouts.push(id);
   };
   tick();
 }
@@ -2254,7 +2269,7 @@ function revealQuestionWithCountdown(qIdx, q, initialTimeLeft) {
 let voicePendingQIdx = null, voicePendingQ = null, voicePendingInitialTimeLeft = undefined;
 function revealVoiceQuestion(qIdx, q, initialTimeLeft) {
   clearInts();
-  voicePlayToken++;
+  const voiceToken = ++voicePlayToken;
   const existingPlayer = document.getElementById('voiceq-player');
   if (existingPlayer) {
     try { existingPlayer.pause(); existingPlayer.currentTime = 0; } catch (e) {}
@@ -2267,7 +2282,8 @@ function revealVoiceQuestion(qIdx, q, initialTimeLeft) {
   statusEl.textContent = 'Sesli soru...';
   triggerBtn.style.display = 'none';
 
-  setTimeout(() => {
+  const id = setTimeout(() => {
+    if (voiceToken !== voicePlayToken) return;
     if (q.audioAutoplay) {
       statusEl.textContent = 'Dinleyin...';
       playVoiceQuestionAudio(qIdx, q, initialTimeLeft);
@@ -2278,11 +2294,12 @@ function revealVoiceQuestion(qIdx, q, initialTimeLeft) {
       statusEl.textContent = 'Sunum yapan kişinin sesi başlatması bekleniyor...';
     }
   }, 1000);
+  pendingTimeouts.push(id);
 }
-function showVoiceQuestion(qIdx, q, initialTimeLeft) {
+function showVoiceQuestion(qIdx, q, initialTimeLeft, playbackAlreadyTriggered = false) {
     // Reconnect sırasında sesli soru oynatma hareketini yeniden kurmak için.
     clearInts();
-    voicePlayToken++;
+    const voiceToken = ++voicePlayToken;
     const existingPlayer = document.getElementById('voiceq-player');
     if (existingPlayer) {
       try { existingPlayer.pause(); existingPlayer.currentTime = 0; } catch (e) {}
@@ -2299,8 +2316,10 @@ function showVoiceQuestion(qIdx, q, initialTimeLeft) {
     statusEl.textContent = 'Sesli soru...';
     triggerBtn.style.display = 'none';
 
-    setTimeout(() => {
-      if (q.audioAutoplay) {
+    const shouldAutoPlay = q.audioAutoplay || playbackAlreadyTriggered;
+    const id = setTimeout(() => {
+      if (voiceToken !== voicePlayToken) return;
+      if (shouldAutoPlay) {
         statusEl.textContent = 'Dinleyin...';
         playVoiceQuestionAudio(qIdx, q, initialTimeLeft);
       } else if (isHost) {
@@ -2310,6 +2329,7 @@ function showVoiceQuestion(qIdx, q, initialTimeLeft) {
         statusEl.textContent = 'Sunum yapan kişinin sesi başlatması bekleniyor...';
       }
     }, 100);
+    pendingTimeouts.push(id);
 }
 function hostTriggerVoicePlay() {
   document.getElementById('voice-overlay-trigger-btn').style.display = 'none';
@@ -2361,7 +2381,11 @@ function playVoiceQuestionAudio(qIdx, q, initialTimeLeft) {
   // zaman aşımı — makul en uzun senaryo metni için fazlasıyla yeterli süre.
   safetyTimeout = setTimeout(() => finish('timeout'), 60000);
   player.onerror = () => finish('error');
-  player.play().catch((err) => { console.debug('[voice] play() rejected', err); finish('play-reject'); });
+  player.play().then(() => {
+    if (isHost) {
+      socket.emit('voice-playback-started', { pin: gamePin, qIdx });
+    }
+  }).catch((err) => { console.debug('[voice] play() rejected', err); finish('play-reject'); });
 }
 
 function getAdjustedTimeLeft(timeLeft, serverTime) {
@@ -2846,7 +2870,7 @@ socket.on('rejoin-player-success', data => {
 
   if (data.phase === 'question' && curQuestion) {
     if (curQuestion.questionType === 'voice' && data.answerStarted === false) {
-      showVoiceQuestion(data.qIdx, curQuestion, typeof data.timeLeft === 'number' ? data.timeLeft : undefined);
+      showVoiceQuestion(data.qIdx, curQuestion, typeof data.timeLeft === 'number' ? data.timeLeft : undefined, !!data.voicePlaybackTriggered);
     } else {
       // Kalan süre yeniden bağlanırken transit gecikmesine göre ayarlanıyor.
       const adjustedTimeLeft = getAdjustedTimeLeft(data.timeLeft, data.serverTime);
