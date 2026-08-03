@@ -138,9 +138,12 @@ export function setupSocketIO(httpServer: HttpServer) {
           const q = session.questions[session.qIdx] as Record<string, unknown>;
           payload.question = getQuestionForPlayers(session, session.qIdx);
           const qTime = (q?.["time"] as number) || 20;
-          const elapsedSec = Math.floor((Date.now() - session.qStartTs) / 1000);
-          payload.timeLeft = Math.max(0, qTime - elapsedSec);
+          const answerStarted = q?.["questionType"] !== "voice" || session.qStartTs > 0;
+          payload.timeLeft = answerStarted
+            ? Math.max(0, qTime - Math.floor((Date.now() - session.qStartTs) / 1000))
+            : qTime;
           payload.serverTime = Date.now();
+          payload.answerStarted = answerStarted;
           const myAnswer = player.answers[session.qIdx];
           payload.selected = myAnswer ? myAnswer.choice : null;
         }
@@ -210,24 +213,42 @@ export function setupSocketIO(httpServer: HttpServer) {
     });
 
     // ── HOST: Start game ──────────────────────────────────────────────────
+    function buildQuestionPayload(session: GameSession, qIdx: number) {
+      const q = getQuestionForPlayers(session, qIdx);
+      if (!q) return null;
+      const qTime = (q["time"] as number) || 20;
+      const isVoice = q["questionType"] === "voice";
+      const answerStarted = !isVoice || session.qStartTs > 0;
+      const timeLeft = answerStarted
+        ? Math.max(0, qTime - Math.floor((Date.now() - session.qStartTs) / 1000))
+        : qTime;
+      return {
+        qIdx,
+        question: q,
+        total: session.questions.length,
+        timeLeft,
+        serverTime: Date.now(),
+        answerStarted,
+      };
+    }
+
     socket.on("start-game", (data: { pin: string }) => {
       const session = sessions.get(data.pin);
       if (!session || session.hostSocketId !== socket.id) return;
-
+ 
       session.phase = "question";
       session.qIdx = 0;
-      session.qStartTs = Date.now();
-      session.startedAt = new Date();
-
       const q = getQuestionForPlayers(session, 0);
-      io.to(`game-${data.pin}`).emit("game-started", {
-        qIdx: 0,
-        question: q,
-        total: session.questions.length,
-        title: session.title,
-        timeLeft: (q?.["time"] as number) || 20,
-        serverTime: Date.now(),
-      });
+      if (q?.["questionType"] !== "voice") {
+        session.qStartTs = Date.now();
+      } else {
+        session.qStartTs = 0;
+      }
+      session.startedAt = new Date();
+ 
+      const payload = buildQuestionPayload(session, 0);
+      if (!payload) return;
+      io.to(`game-${data.pin}`).emit("game-started", payload);
       logger.info({ pin: data.pin }, "Game started");
     });
 
@@ -238,15 +259,16 @@ export function setupSocketIO(httpServer: HttpServer) {
 
       session.phase = "question";
       session.qIdx = data.qIdx;
-      session.qStartTs = Date.now();
-
-      io.to(`game-${data.pin}`).emit("question-shown", {
-        qIdx: data.qIdx,
-        question: getQuestionForPlayers(session, data.qIdx),
-        total: session.questions.length,
-        timeLeft: ((session.questions[data.qIdx] as Record<string, unknown>)?.["time"] as number) || 20,
-        serverTime: Date.now(),
-      });
+      const q = getQuestionForPlayers(session, data.qIdx);
+      if (q?.["questionType"] !== "voice") {
+        session.qStartTs = Date.now();
+      } else {
+        session.qStartTs = 0;
+      }
+ 
+      const payload = buildQuestionPayload(session, data.qIdx);
+      if (!payload) return;
+      io.to(`game-${data.pin}`).emit("question-shown", payload);
     });
 
     // ── PLAYER: Submit answer ─────────────────────────────────────────────
@@ -287,7 +309,17 @@ export function setupSocketIO(httpServer: HttpServer) {
       if (!session || session.hostSocketId !== socket.id) return;
       io.to(`game-${data.pin}`).emit("voice-playback-triggered", { qIdx: session.qIdx });
     });
-
+ 
+    socket.on("voice-playback-ended", (data: { pin: string; qIdx: number }) => {
+      const session = sessions.get(data.pin);
+      if (!session || session.phase !== "question" || session.qIdx !== data.qIdx) return;
+      const q = getQuestionForPlayers(session, session.qIdx);
+      if (!q || q["questionType"] !== "voice") return;
+      if (session.qStartTs === 0) {
+        session.qStartTs = Date.now();
+      }
+    });
+ 
     // ── HOST: Reveal answer ───────────────────────────────────────────────
     socket.on("reveal-answer", (data: { pin: string; qIdx: number }) => {
       const session = sessions.get(data.pin);
@@ -298,7 +330,10 @@ export function setupSocketIO(httpServer: HttpServer) {
 
       session.phase = "reveal";
       const q = session.questions[data.qIdx] as Record<string, unknown>;
-
+      if (q?.["questionType"] === "voice" && session.qStartTs === 0) {
+        session.qStartTs = Date.now();
+      }
+ 
       calculateScores(session, data.qIdx);
 
       io.to(`game-${data.pin}`).emit("answer-revealed", {
@@ -328,16 +363,16 @@ export function setupSocketIO(httpServer: HttpServer) {
  
       session.qIdx++;
       session.phase = "question";
-      session.qStartTs = Date.now();
+      const q = getQuestionForPlayers(session, session.qIdx);
+      if (q?.["questionType"] !== "voice") {
+        session.qStartTs = Date.now();
+      } else {
+        session.qStartTs = 0;
+      }
  
-      const q = session.questions[session.qIdx] as Record<string, unknown>;
-      io.to(`game-${data.pin}`).emit("question-shown", {
-        qIdx: session.qIdx,
-        question: getQuestionForPlayers(session, session.qIdx),
-        total: session.questions.length,
-        timeLeft: (q?.["time"] as number) || 20,
-        serverTime: Date.now(),
-      });
+      const payload = buildQuestionPayload(session, session.qIdx);
+      if (!payload) return;
+      io.to(`game-${data.pin}`).emit("question-shown", payload);
     });
 
     // ── HOST: End game ────────────────────────────────────────────────────

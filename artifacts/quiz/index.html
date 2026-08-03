@@ -2287,6 +2287,9 @@ function playVoiceQuestionAudio(qIdx, q, initialTimeLeft) {
     clearTimeout(safetyTimeout);
     player.onended = null;
     player.onerror = null;
+    if (q && q.questionType === 'voice') {
+      socket.emit('voice-playback-ended', { pin: gamePin, qIdx });
+    }
     document.getElementById('voice-overlay').style.display = 'none';
     voicePendingQIdx = null; voicePendingQ = null; voicePendingInitialTimeLeft = undefined;
     if (isHost) showHostQuestion(qIdx, initialTimeLeft); else showPlayerQuestion(qIdx, q, initialTimeLeft);
@@ -2766,9 +2769,13 @@ socket.on('rejoin-player-success', data => {
   myLastChoice = (typeof data.selected === 'number') ? data.selected : -1;
 
   if (data.phase === 'question' && curQuestion) {
-    // Kalan süre yeniden bağlanırken transit gecikmesine göre ayarlanıyor.
-    const adjustedTimeLeft = getAdjustedTimeLeft(data.timeLeft, data.serverTime);
-    showPlayerQuestion(data.qIdx, curQuestion, typeof adjustedTimeLeft === 'number' ? adjustedTimeLeft : undefined);
+    if (curQuestion.questionType === 'voice' && data.answerStarted === false) {
+      showVoiceQuestion(data.qIdx, curQuestion, typeof data.timeLeft === 'number' ? data.timeLeft : undefined);
+    } else {
+      // Kalan süre yeniden bağlanırken transit gecikmesine göre ayarlanıyor.
+      const adjustedTimeLeft = getAdjustedTimeLeft(data.timeLeft, data.serverTime);
+      showPlayerQuestion(data.qIdx, curQuestion, typeof adjustedTimeLeft === 'number' ? adjustedTimeLeft : undefined);
+    }
     // Already answered before disconnecting — reflect that instead of allowing a second answer
     if (myLastChoice >= 0) {
       for (let i = 0; i < 4; i++) {
