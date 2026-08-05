@@ -1,0 +1,41 @@
+# ============================================================================
+# One-click deploy to Render (free tier). In the Render dashboard:
+#   New +  ->  Blueprint  ->  connect this repo. Render reads this file and
+#   creates the web service + a free PostgreSQL database, wired together.
+# After deploy you get a free https://<name>.onrender.com address; you can also
+# attach your own custom domain for free under the service's "Settings".
+# ============================================================================
+
+services:
+  - type: web
+    name: assistt-quiz
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render injects PORT automatically; the app reads it.
+      - key: JWT_SECRET
+        generateValue: true        # Render generates a strong random secret
+      # DATABASE_URL: Bilinçli olarak buraya YAZILMADI. Önceden burada
+      # `fromDatabase: name: assistt-quiz-db` diye bir otomatik bağlantı
+      # vardı — bu, Render'a "her deploy'da DATABASE_URL'i hep bu isimdeki
+      # (ilk oluşturulan, artık süresi dolmuş) veritabanına bağla" diyordu.
+      # Bu yüzden dashboard'dan manuel olarak yeni bir veritabanı URL'i
+      # girilse bile, bir sonraki deploy'da sessizce eski referansla
+      # EZİLİYORDU. Artık DATABASE_URL, Render dashboard'unda Environment
+      # sekmesinden elle girilen, kalıcı bir değer — hangi veritabanını
+      # kullandığınızı SİZ kontrol ediyorsunuz, blueprint dosyası değil.
+      # Girerken veritabanınızın "Internal Database URL"ini kullanın (web
+      # servisiyle aynı Render hesabında/bölgesinde olduğu için External
+      # değil Internal doğru seçimdir — daha hızlı ve güvenlidir).
+      # OPENAI_API_KEY is optional — add it in the dashboard to enable AI.
+
+# Not: Eskiden burada bir "databases:" bloğu vardı (Render'a blueprint
+# aracılığıyla bir Postgres oluşturup yönetmesini söylüyordu). Artık
+# veritabanı Render dashboard'unda ayrı, manuel olarak yönetiliyor
+# (yukarıdaki not) — bu blok kaldırıldı ki Render blueprint senkronizasyonu
+# sırasında eski/artık var olmayan bir veritabanı kaydını yeniden
+# oluşturmaya ya da eşleştirmeye çalışıp kafa karıştırmasın.
