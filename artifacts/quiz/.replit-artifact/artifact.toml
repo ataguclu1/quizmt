@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AssisTT Quiz Time"
+version = "1.0.0"
+id = "artifacts/quiz"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18359
+
+[services.development]
+run = "pnpm --filter @workspace/quiz run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/quiz", "run", "build" ]
+publicDir = "artifacts/quiz/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18359"
+BASE_PATH = "/"
