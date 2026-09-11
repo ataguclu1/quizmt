@@ -1,4 +1,5 @@
 import { Router, type Request } from "express";
+import rateLimit from "express-rate-limit";
 import multer from "multer";
 import { OfficeConverter } from "officeparser";
 import { parseBuffer } from "music-metadata";
@@ -21,6 +22,30 @@ const EXT_TO_TYPE: Record<string, string> = {
 };
 
 const router = Router();
+
+// GÜVENLİK DÜZELTMESİ: AI ve seslendirme uç noktaları dış servislere ücretli/
+// kotalı çağrı yapıyor ve ağır işlem içeriyor. Önceden hiçbir hız sınırı
+// yoktu: giriş yapmış tek bir kullanıcı (ya da çalınmış tek bir token) kısa
+// sürede kotanın tamamını tüketebilir, servisi herkes için kullanılmaz hâle
+// getirebilirdi. Kullanıcı başına saatlik makul bir tavan koyuyoruz.
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Sınır kullanıcı bazında; bu yüzden aşağıda önce requireAuth çalışıyor.
+  // (IP bazlı olsaydı aynı kurum ağındaki herkes tek kotayı paylaşırdı.)
+  keyGenerator: (req) => {
+    const user = (req as Request & { user?: AuthPayload }).user;
+    return user?.sicil || "anonim";
+  },
+  message: { error: "Çok fazla yapay zekâ isteği gönderildi. Lütfen bir süre sonra tekrar deneyin." },
+});
+
+// Sıra önemli: önce kimlik doğrulanır (böylece hız sınırı kullanıcı bazında
+// çalışır), sonra sınır uygulanır. Bu aynı zamanda bu dosyadaki HER uç noktanın
+// kimlik doğrulamasından geçmesini garanti eder.
+router.use(requireAuth, aiLimiter);
 
 /* =========================
    GROQ
@@ -685,7 +710,27 @@ router.post("/chat", requireAuth, async (req, res) => {
     .where(sql`sicil = ${user.sicil}`)
     .catch(() => {});
 
-  const { overview, hosts, sessionInsights, categoryStats, userStats } = await buildAnalyticsContext();
+  // ★ GÜVENLİK DÜZELTMESİ — yetki sınırının aşılması ★
+  // Bu asistan, sistem promptuna TÜM oturumların özetini (host sicilleri,
+  // katılımcı isimleri, birinciler, kullanıcı istatistikleri) koyuyordu ve uç
+  // nokta yalnızca "giriş yapmış olmak" şartı arıyordu. Oysa aynı verinin
+  // REST tarafındaki karşılığı (/api/reports) en az "full" yetkisi ister ve
+  // "full" kullanıcıya YALNIZCA kendi oturumlarını gösterir. Yani en düşük
+  // yetkili rol (limited), asistana soru sorarak REST üzerinden asla
+  // göremeyeceği verileri okuyabiliyordu.
+  // Artık platform verisi yalnızca rapor görme yetkisi olan rollere veriliyor;
+  // diğer roller asistanı yalnızca "nasıl yaparım" soruları için kullanabilir.
+  const canSeeAnalytics = user.role === "admin" || user.role === "manager" || user.role === "full";
+
+  const { overview, hosts, sessionInsights, categoryStats, userStats } = canSeeAnalytics
+    ? await buildAnalyticsContext()
+    : {
+        overview: "YETKİ YOK",
+        hosts: "YETKİ YOK",
+        sessionInsights: "YETKİ YOK",
+        categoryStats: "YETKİ YOK",
+        userStats: "YETKİ YOK",
+      };
 
   const systemPrompt = `Sen AssisTT Quiz Time platformunun analiz ve destek asistanısın. Bu platformda eğitmenler
 farklı projeler (TT Mobil, TTNET, Özel Projeler, Yetkinlik, Buz Kırıcı) için canlı quiz/sınav oturumları açıyor.
@@ -726,7 +771,13 @@ UYGULAMA REHBERİ (kullanıcı "nasıl yaparım" tarzı bir şey sorarsa buradan
 - Excel'den toplu soru yükleme → soru düzenleme ekranındaki "📊 Excel Yükle" butonu
 - Not: Yetki değiştirme gibi bir İŞLEMİ senin üzerinden YAPAMAYIZ, sadece nereden yapılacağını gösterebiliriz.
 
-PLATFORM VERİLERİ:
+${canSeeAnalytics ? "" : `ÖNEMLİ — BU KULLANICININ VERİ YETKİSİ YOK:
+Bu kullanıcının rolü platform istatistiklerini görmeye yetkili değil. Aşağıdaki veri alanları
+"YETKİ YOK" olarak geldi. İstatistik, oturum, katılımcı, host veya kullanıcı verisi içeren
+sorulara SAYI VEYA İSİM VERME; kibarca bu bilgiyi görme yetkisi olmadığını söyle ve yalnızca
+UYGULAMA REHBERİ kısmındaki kullanım sorularını yanıtla.
+
+`}PLATFORM VERİLERİ:
 Genel istatistik (tüm zamanlar): ${overview}
 En aktif hostlar — sicil → oturum sayısı (tüm zamanlar): ${hosts}
 Kayıtlı kullanıcı sayısı ve hiç host olmamış kullanıcılar: ${userStats}

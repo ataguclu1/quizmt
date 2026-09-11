@@ -46,13 +46,33 @@ app.use(
   }),
 );
 app.use(cors());
-// Varsayılan limit (100kb) sesli soru özelliğiyle yetersiz kalıyordu: bir
-// soru setini kütüphaneye kaydetme isteği, ElevenLabs'ten üretilen base64
-// ses verisini (soru başına ~150-500KB) de taşıyor. Tek bir sesli soru bile
-// varsayılan limiti aşıp kaydı "413 Payload Too Large" ile sessizce
-// başarısız kılabilirdi.
-app.use(express.json({ limit: "25mb" }));
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+
+// ── Güvenlik başlıkları ────────────────────────────────────────────────────
+// Ek bir bağımlılık gerektirmeyen, tarayıcı tarafındaki temel korumalar:
+// içerik türü tahminini kapatır, sayfanın başka bir sitenin çerçevesine
+// gömülmesini (clickjacking) engeller ve dış sitelere gönderilen referrer
+// bilgisini sınırlar. Not: içerik güvenliği politikası (CSP) bilinçli olarak
+// eklenmedi — uygulamayla birlikte test edilmeden eklenmesi arayüzü bozabilir.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
+  next();
+});
+
+// ── İstek gövdesi limitleri ────────────────────────────────────────────────
+// GÜVENLİK DÜZELTMESİ: Önceden 25 MB'lık limit TÜM uç noktalara uygulanıyordu
+// — kimlik doğrulaması olmayan giriş uç noktası dahil. Bu, tek bir istekle
+// sunucu belleğini zorlamayı (hizmet dışı bırakma) kolaylaştırıyordu. Artık
+// varsayılan 1 MB; büyük gövdeye gerçekten ihtiyaç duyan iki uç nokta ailesi
+// (sesli soru içeren soru setleri ve yapay zekâ istekleri) için ayrıca
+// tanımlanıyor.
+const largeJson = express.json({ limit: "25mb" });
+app.use("/api/question-sets", largeJson);
+app.use("/api/ai", largeJson);
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 app.use("/api", router);
 

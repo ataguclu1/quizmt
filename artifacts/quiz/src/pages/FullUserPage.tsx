@@ -21,8 +21,8 @@ export default function FullUserPage() {
     } catch {}
   }
 
-  async function handleUpload(name: string, questions: Question[]) {
-    await createQuestionSet(token, name, questions);
+  async function handleUpload(name: string, questions: Question[], category: string) {
+    await createQuestionSet(token, name, questions, category);
     await loadQSets();
   }
 

@@ -12,11 +12,12 @@ type Answer = { text: string; correct: boolean };
 type QuestionRow = { text: string; answers: Answer[]; questionType?: string; voiceScript?: string };
 type PlayerAnswerEntry = { choice: number; ts: number };
 type PlayerAnswers = {
+  pid?: string;
   name: string;
   score: number;
   answers: Record<number, PlayerAnswerEntry>;
 };
-type LeaderboardEntry = { name: string; score: number };
+type LeaderboardEntry = { name: string; score: number; pid?: string };
 type SessionResults = {
   leaderboard?: LeaderboardEntry[];
   playerAnswers?: PlayerAnswers[];
@@ -80,18 +81,29 @@ router.get("/sessions/:id/export", requireFull, async (req, res) => {
       ? results.leaderboard
       : [...playerAnswers].sort((a, b) => b.score - a.score).map(p => ({ name: p.name, score: p.score }));
 
-    const correctIdxByQ = questions.map(q => q.answers?.findIndex(a => a.correct) ?? -1);
+    // ÖNEMLİ: Bir soruda birden fazla doğru şık işaretlenebiliyor (oyun motoru
+    // bunu destekliyor). Eskiden burada yalnızca İLK doğru şık (findIndex)
+    // dikkate alınıyordu; diğer doğru şıkkı işaretleyen katılımcı raporda
+    // yanlış görünüyordu. Artık tüm doğru şıklar kümesi kullanılıyor.
+    const correctIdxsByQ = questions.map(q =>
+      new Set((q.answers || []).map((a, i) => (a.correct ? i : -1)).filter(i => i !== -1)),
+    );
+    const firstCorrectByQ = questions.map((_, i) => {
+      const it = correctIdxsByQ[i].values().next();
+      return it.done ? -1 : (it.value as number);
+    });
+    const byPid = new Map(playerAnswers.filter(p => p.pid).map(p => [p.pid as string, p]));
     const byName = new Map(playerAnswers.map(p => [p.name, p]));
 
     // ── Sayfa 1: Katılımcılar ────────────────────────────────────────────
     const participantHeader = ["Sıra", "İsim", "Doğru", "Yanlış", "Boş", "Puan", ...questions.map((_, i) => `Soru ${i + 1}`)];
     const participantRows = leaderboard.map((entry, rank) => {
-      const p = byName.get(entry.name);
+      const p = (entry.pid ? byPid.get(entry.pid) : undefined) || byName.get(entry.name);
       let correct = 0, wrong = 0, blank = 0;
       const perQ: string[] = questions.map((_, qIdx) => {
         const ans = p?.answers?.[qIdx];
         if (ans === undefined) { blank++; return "–"; }
-        const isCorrect = ans.choice === correctIdxByQ[qIdx];
+        const isCorrect = correctIdxsByQ[qIdx].has(ans.choice);
         if (isCorrect) correct++; else wrong++;
         return isCorrect ? "✓" : "✗";
       });
@@ -101,13 +113,16 @@ router.get("/sessions/:id/export", requireFull, async (req, res) => {
     // ── Sayfa 2: Soru Analizi ─────────────────────────────────────────────
     const questionHeader = ["Soru No", "Soru Metni", "Doğru Cevap", "Doğru Sayısı", "Toplam Cevap", "Doğru Oranı (%)"];
     const questionRows = questions.map((q, qIdx) => {
-      const correctText = q.answers?.[correctIdxByQ[qIdx]]?.text || "-";
+      const correctText = (q.answers || [])
+        .filter((_, i) => correctIdxsByQ[qIdx].has(i))
+        .map(a => a.text)
+        .join(" | ") || (q.answers?.[firstCorrectByQ[qIdx]]?.text ?? "-");
       let correctCount = 0, totalAnswered = 0;
       for (const p of playerAnswers) {
         const ans = p.answers?.[qIdx];
         if (ans === undefined) continue;
         totalAnswered++;
-        if (ans.choice === correctIdxByQ[qIdx]) correctCount++;
+        if (correctIdxsByQ[qIdx].has(ans.choice)) correctCount++;
       }
       const rate = totalAnswered ? Math.round((correctCount / totalAnswered) * 100) : 0;
       // Sesli sorularda Excel'de ses dosyası olamayacağı için, "Soru Metni"

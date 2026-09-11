@@ -3,14 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import type { Question } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { QUESTION_SET_CATEGORIES, type Question } from "@/lib/api";
 
 interface Props {
-  onUpload: (name: string, questions: Question[]) => Promise<void>;
+  onUpload: (name: string, questions: Question[], category: string) => Promise<void>;
 }
 
 export default function QuestionSetUploader({ onUpload }: Props) {
   const [name, setName] = useState("");
+  // Sunucu kategori alanını zorunlu tutuyor; seçilmezse kayıt 400 ile döner.
+  const [category, setCategory] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,6 +53,10 @@ export default function QuestionSetUploader({ onUpload }: Props) {
       setError("Soru seti adı zorunludur.");
       return;
     }
+    if (!category) {
+      setError("Proje/kategori seçmelisiniz.");
+      return;
+    }
     if (!jsonText.trim()) {
       setError("Lütfen JSON içerik girin veya dosya yükleyin.");
       return;
@@ -78,8 +85,9 @@ export default function QuestionSetUploader({ onUpload }: Props) {
 
     setLoading(true);
     try {
-      await onUpload(name.trim(), questions);
+      await onUpload(name.trim(), questions, category);
       setName("");
+      setCategory("");
       setJsonText("");
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -105,6 +113,20 @@ export default function QuestionSetUploader({ onUpload }: Props) {
               onChange={e => setName(e.target.value)}
               required
             />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Proje / Kategori</Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder="Kategori seçin..." />
+              </SelectTrigger>
+              <SelectContent>
+                {QUESTION_SET_CATEGORIES.map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1">

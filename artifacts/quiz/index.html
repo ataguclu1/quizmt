@@ -892,8 +892,61 @@ try {
 // gamePin/myPin/myName reset on every reload, so without this the rejoin logic
 // below never fires and people get bounced back to the landing screen.
 const SESSION_KEY = 'quiz_active_session';
-function saveActiveSession(pin, name, host, avatar) {
-  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ pin, name, host, avatar })); } catch(e) {}
+
+// ══════════════════════ KALICI CİHAZ KİMLİĞİ ══════════════════════
+// Katılımcı eskiden yalnızca ADIYLA tanınıyordu. Sayfa yenilendiğinde sunucu
+// kişiyi tanıyamıyor, eski kaydı hâlâ "bağlı" göründüğü için onu YENİ biri
+// sayıp adının yanına (2) ekliyordu — lobide sahte katılımcı, sayıda şişme.
+// Artık her tarayıcı, isimden bağımsız kalıcı bir kimlik taşıyor; F5 sonrası
+// (hatta sınav ortasında) aynı kimlikle dönülüyor ve kişi kendi kaydına —
+// puanı ve cevaplarıyla birlikte — geri bağlanıyor.
+const PLAYER_ID_KEY = 'quiz_player_id';
+function getPlayerId() {
+  try {
+    let v = localStorage.getItem(PLAYER_ID_KEY);
+    if (!v) {
+      v = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(PLAYER_ID_KEY, v);
+    }
+    return v;
+  } catch (e) {
+    return 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+  }
+}
+const myPlayerId = getPlayerId();
+
+// Host tarayıcısının kalıcı kimliği — bağlantı koptuğunda oturumu güvenle
+// devralabilmesi için (başkasının devralmasını da engeller).
+const HOST_TOKEN_KEY = 'quiz_host_token';
+function getHostToken() {
+  try {
+    let v = localStorage.getItem(HOST_TOKEN_KEY);
+    if (!v) {
+      v = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'h-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(HOST_TOKEN_KEY, v);
+    }
+    return v;
+  } catch (e) {
+    return 'h-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+  }
+}
+const myHostToken = getHostToken();
+
+// "Sahneye çıktım" durumu: F5 sonrası kişinin avatar ekranına geri
+// düşmemesi, yarışmaya kaldığı yerden devam etmesi için saklanır.
+let iAmOnStage = false;
+
+function saveActiveSession(pin, name, host, avatar, onStage) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+      pin, name, host, avatar,
+      onStage: (onStage === undefined) ? iAmOnStage : !!onStage,
+    }));
+  } catch(e) {}
 }
 function loadActiveSession() {
   try { const raw = sessionStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch(e) { return null; }
@@ -928,14 +981,18 @@ socket.on('connect', () => {
   const saved = loadActiveSession();
   if (saved && saved.host && saved.pin) {
     isHost = true; gamePin = saved.pin;
-    socket.emit('rejoin-session', { pin: saved.pin });
+    socket.emit('rejoin-session', { pin: saved.pin, hostToken: myHostToken, token: authToken });
   } else if (saved && !saved.host && saved.pin && saved.name) {
     myPin = saved.pin; myName = saved.name;
+    iAmOnStage = !!saved.onStage;
     if (saved.avatar) { myAvatar = saved.avatar; isReconnectJoin = true; }
-    socket.emit('join-session', { pin: saved.pin, name: saved.name, avatar: myAvatar });
+    socket.emit('join-session', {
+      pin: saved.pin, name: saved.name, avatar: myAvatar,
+      pid: myPlayerId, ready: iAmOnStage,
+    });
   } else if (isHost && gamePin) {
     // Fallback: same-page reconnect (socket dropped without a full reload)
-    socket.emit('rejoin-session', { pin: gamePin });
+    socket.emit('rejoin-session', { pin: gamePin, hostToken: myHostToken, token: authToken });
   }
 });
 socket.on('connect_error', err => console.error('Bağlantı hatası:', err.message));
@@ -964,12 +1021,10 @@ socket.on('game-stopped', () => {
 });
 
 // Host rejoined their own session after reconnect
-socket.on('session-rejoined', (data) => {
+socket.on('session-rejoined', () => {
   toast('✅ Oyun oturumunuza geri döndünüz.');
-  // Restore host state if we left the host screen
-  if (data.pin === gamePin) {
-    document.getElementById('player-count').textContent = String(data.playerCount || 0);
-  }
+  // Katılımcı listesi ve sayısı aşağıdaki applyLobbyUpdate tarafından,
+  // tek kaynaktan tazeleniyor (bkz. HOST: LOBBY bölümü).
 });
 socket.on('rejoin-failed', () => {
   clearActiveSession();
@@ -2175,13 +2230,23 @@ function confirmStartLobby() {
 
   const title = (document.getElementById('quiz-title')?.value || 'AssisTT Eğitim Quiz').trim();
   const category = document.getElementById('launch-category')?.value || '';
-  const payload = { pin: suggestedPin, questions, title, category, hostSicil: currentSicil };
+  // hostSicil artık sunucuda imzalı token'dan okunuyor; token'ı ve host
+  // kimliğini burada gönderiyoruz (soket, giriş yapılmadan önce kurulduğu
+  // için el sıkışmasında token taşımıyor).
+  const payload = { pin: suggestedPin, questions, title, category, token: authToken, hostToken: myHostToken };
   if (fbEnabled && fbRules.length) payload.feedbackRules = fbRules;
   socket.emit('create-session', payload);
   sessionInProgress = true;
   closeLaunchModal();
   setBgMusic('lobby');
 }
+
+socket.on('session-rejoined', data => {
+  if (data && data.players) applyLobbyUpdate(data);
+});
+socket.on('session-error', data => {
+  toast('⚠️ ' + ((data && data.message) || 'Oturum oluşturulamadı. Lütfen çıkış yapıp tekrar giriş yapın.'));
+});
 
 socket.on('session-created', data => {
   gamePin = data.pin;
@@ -2207,24 +2272,54 @@ function dismissHostInfoBox() {
   toast('Bu bilgilendirme bir daha gösterilmeyecek');
 }
 
-socket.on('player-joined', data => {
+// Sunucu artık üç ayrı sayı gönderiyor:
+//   playerCount  → sahneye çıkmış VE o an bağlı olanlar (ana sayı)
+//   waitingCount → adını yazmış, henüz sahneye çıkmamış, bağlı olanlar
+//   onlineCount  → bağlı olan herkes
+// Böylece F5 atan biri sayıyı şişirmiyor, kopan biri de sayılmıyor.
+let lastWaitingCount = 0;
+function applyLobbyUpdate(data) {
   players = data.players || [];
-  document.getElementById('player-count').textContent = data.playerCount;
+  lastWaitingCount = data.waitingCount || 0;
+  const cntEl = document.getElementById('player-count');
+  if (cntEl) cntEl.textContent = (data.playerCount !== undefined ? data.playerCount : players.length);
   renderPlayerChips();
-});
-socket.on('player-left', data => {
-  players = data.players || [];
-  document.getElementById('player-count').textContent = data.playerCount;
-  renderPlayerChips();
-});
+}
+socket.on('player-joined', applyLobbyUpdate);
+socket.on('player-left', applyLobbyUpdate);
+socket.on('players-updated', applyLobbyUpdate);
 
 function renderPlayerChips() {
   const c = document.getElementById('player-chips');
-  if (!players.length) { c.innerHTML='<div style="color:rgba(255,255,255,.3);font-size:.9rem">Bağlantı bekleniyor...</div>';return; }
-  c.innerHTML = players.map(p => {
+  if (!c) return;
+  // Sahneye çıkmış ve bağlı olanlar önce; henüz çıkmamışlar soluk ve ayrı.
+  const onStage = players.filter(p => p.ready && p.connected !== false);
+  const offline = players.filter(p => p.ready && p.connected === false);
+  const waiting = players.filter(p => !p.ready && p.connected !== false);
+
+  if (!onStage.length && !waiting.length && !offline.length) {
+    c.innerHTML = '<div style="color:rgba(255,255,255,.3);font-size:.9rem">Bağlantı bekleniyor...</div>';
+    return;
+  }
+
+  const chip = (p, opts) => {
+    const o = opts || {};
     const url = `https://api.dicebear.com/7.x/${(p.avatar||{}).style||'adventurer'}/svg?seed=${encodeURIComponent((p.avatar||{}).seed||p.name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
-    return `<div class="pchip"><div class="chip-av"><img src="${url}" width="36" height="36"></div>${escHtml(p.name)}</div>`;
-  }).join('');
+    return `<div class="pchip" style="${o.dim ? 'opacity:.45;' : ''}" title="${o.title || ''}">
+      <div class="chip-av"><img src="${url}" width="36" height="36"></div>${escHtml(p.name)}${o.suffix || ''}
+    </div>`;
+  };
+
+  let html = onStage.map(p => chip(p)).join('');
+  html += offline.map(p => chip(p, { dim: true, suffix: ' <span style="font-size:.75rem">🔌</span>', title: 'Bağlantısı koptu — kaydı ve puanı korunuyor' })).join('');
+
+  if (waiting.length) {
+    html += `<div style="width:100%;margin:.6rem 0 .3rem;color:rgba(255,255,255,.45);font-size:.8rem">
+      İsmini yazdı, sahneye çıkmayı bekliyor (${waiting.length})
+    </div>`;
+    html += waiting.map(p => chip(p, { dim: true, title: 'Henüz sahneye çıkmadı — oyuna dahil değil' })).join('');
+  }
+  c.innerHTML = html;
 }
 function escHtml(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
 
@@ -2391,13 +2486,20 @@ function playVoiceQuestionAudio(qIdx, q) {
   player.play().catch(() => {}); // .play() reddedilse bile (örn. autoplay kısıtı) akış zaten yukarıdaki zamanlayıcıyla devam ediyor
 }
 
+// Sahneye çıkmamış bir katılımcı yayınları dinler ama ekranı DEĞİŞMEZ:
+// avatar seçim ekranında kalır, "Sahneye Çık" deyince sunucu onu o anki
+// soruya alır. Host her zaman geçer (o yayının sahibi zaten kendisidir).
+function shouldFollowQuestions() { return isHost || iAmOnStage; }
+
 socket.on('game-started', data => {
   curQIdx = data.qIdx; totalQuestions = data.total; curQuestion = data.question;
   if (data.title) currentQuizTitle = data.title;
+  if (!shouldFollowQuestions()) return;
   revealQuestionWithCountdown(curQIdx, curQuestion);
 });
 socket.on('question-shown', data => {
   curQIdx = data.qIdx; totalQuestions = data.total; curQuestion = data.question;
+  if (!shouldFollowQuestions()) return;
   revealQuestionWithCountdown(curQIdx, curQuestion);
 });
 
@@ -2488,7 +2590,7 @@ socket.on('answer-revealed', data => {
     document.getElementById('all-banner').style.display = 'none';
   }
 
-  if (!isHost) showPlayerReveal(qIdx, correctIndexes, playerScores);
+  if (!isHost && iAmOnStage) showPlayerReveal(qIdx, correctIndexes, playerScores);
 });
 
 // ══════════════════════ HOST: NEXT / LEADERBOARD ══════════════════════
@@ -2723,14 +2825,18 @@ function joinGame() {
 
   myName = name; myPin = pin; myScore = 0; myLastChoice = -1;
 
-  socket.emit('join-session', { pin, name, avatar: myAvatar });
+  iAmOnStage = false;
+  socket.emit('join-session', { pin, name, avatar: myAvatar, pid: myPlayerId, ready: false });
 }
 
 // Persistent listeners (not .once) so the silent auto-rejoin on page load —
 // which doesn't go through joinGame() — also gets handled correctly.
-socket.on('join-success', () => {
+socket.on('join-success', (data) => {
   const err = document.getElementById('join-err');
   if (err) err.style.display = 'none';
+  if (data && data.inProgress) {
+    toast('Sınav devam ediyor — "Sahneye Çık" dediğinizde sıradaki sorudan katılacaksınız.');
+  }
 
   if (isReconnectJoin) {
     // Avatar zaten daha önce seçilip kaydedilmişti — tekrar seçtirmeye
@@ -2758,9 +2864,16 @@ socket.on('join-error', data => {
   show('join');
 });
 
+// "Sahneye Çık" — bu düğme artık gerçek bir anlam taşıyor.
+// Bu ana kadar kişi yalnızca adını yazmış bir "bekleyen"dir: host ekranındaki
+// katılımcı sayısına dahil değildir ve oyun başlasa bile soru ekranına
+// düşmez. Sahneye çıktığı anda yarışmanın parçası olur.
+// Oyun çoktan başlamışsa sunucu onu o anki duruma alır — yani 4. soruda
+// gelip sahneye çıkan biri sıradaki sorudan itibaren normal şekilde yarışır.
 function confirmAvatar() {
-  socket.emit('update-avatar', { pin: myPin, name: myName, avatar: myAvatar });
-  saveActiveSession(myPin, myName, false, myAvatar);
+  iAmOnStage = true;
+  socket.emit('enter-stage', { pin: myPin, pid: myPlayerId, avatar: myAvatar });
+  saveActiveSession(myPin, myName, false, myAvatar, true);
   document.getElementById('w-av-svg').innerHTML = buildAvatarSVG(myAvatar);
   document.getElementById('w-name').textContent = myName;
   document.getElementById('w-pin').textContent = myPin;
@@ -2837,7 +2950,7 @@ function submitAns(ai, qi) {
   if (myLastChoice !== -1) return; // already answered
   sfxSelect();
   myLastChoice = ai;
-  socket.emit('submit-answer', { pin: myPin, name: myName, qIdx: qi, choice: ai });
+  socket.emit('submit-answer', { pin: myPin, name: myName, pid: myPlayerId, qIdx: qi, choice: ai });
 
   // Dim all, highlight selected
   for (let i = 0; i < 4; i++) {

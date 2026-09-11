@@ -61,3 +61,7 @@ assisttquiz.tar.gz
 
 # Replit clone/build logs pasted into the repo
 attached_assets/Pasted-*.txt
+
+# Teknik dokümanlar — herkese açık depoya gönderilmesin
+/*.docx
+/*.pdf

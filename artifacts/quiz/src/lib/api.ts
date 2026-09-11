@@ -45,6 +45,8 @@ export interface QuestionSet {
   name: string;
   questions: Question[];
   createdBy: string | null;
+  createdByName?: string | null;
+  category?: string | null;
   createdAt: string | null;
 }
 
@@ -53,16 +55,35 @@ export interface Question {
   time: number;
   pts: "standard" | "double" | "none";
   answers: { text: string; correct: boolean }[];
+  /** 'voice' ise soru bir ses kaydıyla sorulur (aşağıdaki alanlar dolu olur). */
+  questionType?: string;
+  voiceScript?: string;
+  audioData?: string | null;
+  audioAutoplay?: boolean;
+  audioDurationSec?: number;
 }
+
+/**
+ * Sunucu (routes/question-sets.ts) kategori alanını ZORUNLU tutuyor ve listede
+ * olmayan bir değeri reddediyor. Arayüz eskiden bu alanı hiç göndermiyordu; bu
+ * yüzden soru seti kaydetme isteği sunucu tarafından 400 ile geri çevriliyordu.
+ */
+export const QUESTION_SET_CATEGORIES = [
+  "TT Mobil",
+  "TTNET",
+  "Özel Projeler",
+  "Yetkinlik",
+  "Buz Kırıcı",
+] as const;
 
 export async function getQuestionSets(token: string) {
   return apiRequest<QuestionSet[]>("/api/question-sets", {}, token);
 }
 
-export async function createQuestionSet(token: string, name: string, questions: Question[]) {
+export async function createQuestionSet(token: string, name: string, questions: Question[], category: string) {
   return apiRequest<QuestionSet>("/api/question-sets", {
     method: "POST",
-    body: JSON.stringify({ name, questions }),
+    body: JSON.stringify({ name, questions, category }),
   }, token);
 }
 

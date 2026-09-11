@@ -12,8 +12,25 @@ import { logger } from "../lib/logger";
 
 const router = Router();
 
-const ADMIN_SICIL = "A053252";
-const ADMIN_DEFAULT_PASSWORD = "admin123";
+// ════════════════════════════════════════════════════════════════════════════
+// GÜVENLİK DÜZELTMESİ — yönetici şifresi artık kodda DEĞİL
+// ════════════════════════════════════════════════════════════════════════════
+// Önceden yönetici şifresi burada sabit yazılıydı. Kod deposu herkese açık
+// olduğu için bu şifre kamuya açıktı; üstelik ücretsiz veritabanı her ay
+// yenilendiğinde değiştirilmiş şifre de silindiği için sistem kendiliğinden
+// bu varsayılana geri dönüyordu — yani her ay tekrarlayan bir açıklık.
+//
+// Yeni davranış:
+//   • Şifre, barındırma platformunda tanımlanan ADMIN_PASSWORD ortam
+//     değişkeninden okunur. Kodda hiçbir şifre bulunmaz.
+//   • Veritabanında değiştirilmiş bir şifre varsa o geçerlidir (panelden
+//     değiştirme çalışmaya devam eder).
+//   • Ne ortam değişkeni ne de veritabanı kaydı varsa yönetici girişi
+//     KAPALIDIR — sessizce bir varsayılana düşmez.
+// Sicil numarası gizli bir bilgi değildir; yine de ortam değişkeniyle
+// değiştirilebilir.
+const ADMIN_SICIL = process.env.ADMIN_SICIL || "A053252";
+const ADMIN_ENV_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 // Başarılı bir girişte "son giriş" zamanını günceller ve giriş geçmişine bir
 // kayıt ekler ("Giriş Bilgileri" panelinde tarih listesi için). Admin
@@ -79,9 +96,20 @@ router.post("/login", loginRateLimiter, async (req, res) => {
     const storedHash = await getAdminPasswordHash();
     let valid: boolean;
     if (storedHash) {
+      // Panelden değiştirilmiş şifre — her zaman önceliklidir.
       valid = await bcrypt.compare(password, storedHash);
+    } else if (ADMIN_ENV_PASSWORD) {
+      valid = password === ADMIN_ENV_PASSWORD;
     } else {
-      valid = password === ADMIN_DEFAULT_PASSWORD;
+      // Ne kayıt ne ortam değişkeni var: giriş kapalı.
+      logger.error(
+        "Yönetici girişi denendi ancak ADMIN_PASSWORD tanımlı değil ve veritabanında şifre kaydı yok. " +
+        "Barındırma platformunda ADMIN_PASSWORD ortam değişkenini tanımlayın.",
+      );
+      res.status(503).json({
+        error: "Yönetici girişi sunucuda yapılandırılmamış. Sistem sorumlusuyla iletişime geçin.",
+      });
+      return;
     }
     if (!valid) {
       recordFailure(sicil);
@@ -153,8 +181,11 @@ router.post("/change-password", requireAuth, async (req, res) => {
     let valid: boolean;
     if (storedHash) {
       valid = await bcrypt.compare(oldPassword, storedHash);
+    } else if (ADMIN_ENV_PASSWORD) {
+      valid = oldPassword === ADMIN_ENV_PASSWORD;
     } else {
-      valid = oldPassword === ADMIN_DEFAULT_PASSWORD;
+      res.status(503).json({ error: "Yönetici girişi sunucuda yapılandırılmamış." });
+      return;
     }
     if (!valid) {
       res.status(401).json({ error: "Mevcut şifre hatalı." });
